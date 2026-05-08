@@ -207,3 +207,43 @@ The classifier is a pure function with 5 unit tests. Verified end-to-end against
 
 **Implementation note:** The spike retrospective claimed Copilot returns "all zeros" including tokens. That was wrong: Copilot **does** return token counts, just not cost. Verified: `gen_ai.usage.input_tokens = 6` for the phase 0.2 verification turn. Adoption metrics work even on subscription providers.
 
+
+---
+
+## 2026-05-08 · D13 · Identity from JWT, not from environment (mirrors dashboard D8)
+
+**Decision:** The pi-usage-reporter extension reads only its bearer token (from `~/.config/pi-usage/config.json` or `PI_USAGE_TOKEN` env var) and forwards it as `Authorization: Bearer <jwt>` on every OTLP request. The extension does not decode the token, does not assert a `user_id`, and the previous `git config --global user.email` fallback is removed. Identity is extracted from the JWT by the API per [`pi-usage-reporter-DESIGN.md` §3.6](../design/pi-usage-reporter-DESIGN.md) and [`agent-spend-dashboard/docs/strategy/decisions-LOG.md` D8](https://github.com/vilosource/agent-spend-dashboard/blob/main/docs/strategy/decisions-LOG.md).
+
+**Removed configuration** (no longer accepted; logged as warnings if set):
+- `PI_USAGE_USER_ID` env var
+- `git config --global user.email` fallback
+- `${USER}@${hostname}` last-resort fallback
+
+**Scope:** `packages/pi-usage-reporter/src/extension/identity.ts` simplifies dramatically; the entire identity-resolver flow becomes "read the token; if no token, warn once and disable."
+
+**Rationale:** Until D13, the extension's identity was best-effort and forgeable: anyone could set `PI_USAGE_USER_ID=ceo@example.com` and the dashboard would treat that as truth. Fine for a lab; not fine for any deployed environment. Mirroring dashboard D8 here records the agreement on the extension side: the extension does not assert identity; the API does.
+
+**Implementation impact:**
+
+- `identity.ts` shrinks to ~20 LOC: read token from config or env, resolve machine-id UUID, return.
+- `index.ts` extension entry point: emit a one-line warning ("PI_USAGE_TOKEN not configured; telemetry disabled. Run `pi-usage login`.") if no token; do not crash pi.
+- The OTel `Authorization` header is set from the token instead of from a separate `PI_USAGE_TOKEN` env var (the env var is one of the input sources for the token, not a separate concept).
+- `pi-usage doctor`'s identity check changes from "verify git config" to "verify token validity by hitting `/api/me`."
+
+**Sunset note:** The previous `agent.user.id` attribute the extension emits is **kept** (still useful as audit data — what did the extension *think* the user was?), but is no longer used as identity ground truth on the server.
+
+---
+
+## 2026-05-08 · D14 · `pi-usage login` becomes the primary install path
+
+**Decision:** The recommended install path is **clicking "Install" in the SPA** (visible after SSO login) and pasting the resulting one-liner into a terminal. The script writes `~/.config/pi-usage/config.json`, runs `npm install -g @vilosource/pi-usage-reporter`, and patches `~/.pi/agent/settings.json` to load the extension. `pi-usage login` is the alternative for terminal-only environments via OAuth 2.0 Device Authorization Grant (RFC 8628).
+
+For lab work without SSO: `pi-usage login --lab --endpoint http://localhost:8080`. For CI: `PI_USAGE_TOKEN=$AGENT_SPEND_CI_TOKEN`.
+
+All three paths produce the same `~/.config/pi-usage/config.json`.
+
+**Scope:** `pi-usage` CLI (`login`, `logout`, `whoami`, `uninstall`); the SPA's `/install` page generates the one-liner.
+
+**Rationale:** Per [D10 in the dashboard's decisions log](https://github.com/vilosource/agent-spend-dashboard/blob/main/docs/strategy/decisions-LOG.md). The SPA-driven path is faster (60 seconds from first SSO to running pi with telemetry) and matches the privacy-by-design pattern (SPA shows what will be transmitted before the user pastes anything). The CLI path is the fallback for environments where opening a browser on the same host is awkward (CI, headless dev VMs).
+
+**`pi-usage uninstall`** is symmetric: revokes the server-side token, removes `~/.config/pi-usage/`, patches `settings.json` to remove the extension entry. No cruft left on a developer's machine. (Per [C6 of the API+SPA design](https://github.com/vilosource/agent-spend-dashboard/blob/main/docs/design/api-and-spa-DESIGN.md).)

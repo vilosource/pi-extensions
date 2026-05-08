@@ -414,28 +414,36 @@ export function wireHooks(pi, otel, buffer, ident, cfg) {
 
 ### 3.6 Identity resolution
 
-Resolution happens once at extension init, in this priority order:
+> **Superseded as of 2026-05-08 by D13** (this repo's decisions log) and [D8 in the dashboard's decisions log](https://github.com/vilosource/agent-spend-dashboard/blob/main/docs/strategy/decisions-LOG.md). Identity now comes from a JWT minted by the API after OIDC login — the extension does **not** resolve identity from the environment any more. The original three-tier priority ($env > git > fallback) was best-effort and forgeable; it is replaced by a single, authoritative source.
+
+Resolution at extension init reduces to: read `~/.config/pi-usage/config.json`, extract the `token` and `endpoint` fields. The token is a JWT signed by our API; its `sub`/`email` claim is the user identity. The extension never decodes the JWT — it just forwards it as `Authorization: Bearer <token>` on every OTLP request. The API extracts the identity claim and writes it into `agent_spend_logs.user_id`.
+
+If no `~/.config/pi-usage/config.json` exists and `PI_USAGE_TOKEN` is not set in the environment, the extension prints a one-line warning pointing the user at `pi-usage login` and returns immediately. **Telemetry never affects the host pi session** — a missing token disables emission silently, never crashes pi (per [D11](../strategy/decisions-LOG.md)).
 
 ```mermaid
 flowchart TB
-  start([extension init]) --> env{"PI_USAGE_USER_ID<br/>set?"}
-  env -->|yes| use_env["use env value"]
-  env -->|no| git{"git config<br/>user.email set?"}
-  git -->|yes| use_git["use git email"]
-  git -->|no| fallback["use ${USER}@${hostname}<br/>(flagged 'unverified')"]
-  use_env --> machine
-  use_git --> machine
-  fallback --> machine
-  machine{"~/.config/pi-usage/<br/>machine-id exists?"}
+  start([extension init]) --> env{"PI_USAGE_TOKEN<br/>env var set?"}
+  env -->|yes| use_env["token = env value"]
+  env -->|no| cfg{"~/.config/pi-usage/<br/>config.json readable?"}
+  cfg -->|yes| use_cfg["token = config.token<br/>endpoint = config.endpoint"]
+  cfg -->|no| disable["warn once,<br/>disable telemetry,<br/>return"]
+  use_env --> machine{"~/.config/pi-usage/<br/>machine-id exists?"}
+  use_cfg --> machine
   machine -->|yes| read["read existing UUID"]
   machine -->|no| create["crypto.randomUUID()<br/>persist"]
-  read --> done([identity ready])
+  read --> done([init complete])
   create --> done
 ```
 
-`pi.user.team` is **not** resolved on the developer machine. The Collector or API side maps `user.id → team` from a server-managed table (see §6.4). This avoids leaking org structure to dotfiles and avoids stale team mappings on every laptop.
+`agent.user.team` is **not** resolved on the developer machine. The API maps `user.id → team` server-side from the JWT and the `users` table.
 
-`agent.machine.id` is intentionally a random UUID — **not** based on any hardware identifier. We do not want the appearance of fingerprinting, and we want machines to be re-pairable with new physical hosts (`rm machine-id` and let it regenerate).
+`agent.machine.id` is still a random UUID per machine — **not** based on any hardware identifier. Per-machine UUID disambiguates a developer's many machines (laptop / desktop / dev VM / CI), but identity (the user) comes from the JWT.
+
+**Removed configuration** (no longer accepted; logged as warnings if set):
+
+- `PI_USAGE_USER_ID` — identity is in the token, not user-overridable.
+- `git config --global user.email` fallback — was best-effort, never authoritative.
+- `${USER}@${hostname}` fallback — same reason.
 
 ### 3.7 Workspace resolution
 
@@ -606,7 +614,7 @@ Operator-tunable knobs (env vars, all optional):
 | `PI_USAGE_ENDPOINT` | (required) | OTLP endpoint URL; comma-separated for multi-endpoint emit |
 | `PI_USAGE_TOKEN` | (required) | bearer token (single endpoint) |
 | `PI_USAGE_HEADERS` | (none) | raw headers `Key=Value;Key2=Value2`; multi-endpoint uses `PI_USAGE_HEADERS_<n>` |
-| `PI_USAGE_USER_ID` | git email | identity override |
+| `PI_USAGE_USER_ID` | (removed) | **Removed per D13.** Identity comes from the JWT, not user-overridable. Setting this env var has no effect; logged as a warning if set. |
 | `PI_USAGE_REDACT_PATHS` | `0` | hash workspace cwd / drop repo / drop branch |
 | `PI_USAGE_BATCH_INTERVAL_MS` | `10000` | OTel batch interval |
 | `PI_USAGE_WAL_DIR` | `~/.cache/pi-usage` | WAL location |
@@ -630,19 +638,34 @@ PI_USAGE_HEADERS_2='Authorization=Basic <grafana cloud token>'
 
 ### 3.13 The `pi-usage` CLI
 
-Bundled in the same package, runnable standalone:
+Bundled in the same package, runnable standalone. Updated for the API + SPA design (D10):
 
 ```
-pi-usage doctor                # 8-point health check (config, identity, OTel reachability, WAL, git, etc.)
-pi-usage status [--days N]     # local stats; works fully offline (reads pi sessions + WAL)
+pi-usage login                 # OAuth 2.0 Device Authorization Grant (RFC 8628)
+                               # against <PI_USAGE_ENDPOINT>; writes
+                               # ~/.config/pi-usage/config.json
+pi-usage login --lab           # generate a self-signed lab token; no SSO
+                               # required; useful for local development
+pi-usage login --machine NAME  # name this machine (default: `${USER}@${hostname}`)
+pi-usage logout                # call DELETE /api/me/tokens/<id> on this machine's
+                               # token; remove ~/.config/pi-usage/
+pi-usage whoami                # decode the local JWT and print { email, role, machine }
+pi-usage doctor                # 8-point health check (config, token validity,
+                               # OTel reachability, WAL, machine-id, git, etc.)
+pi-usage status [--days N]     # local stats; works fully offline (reads pi
+                               # sessions + WAL); does NOT call the API
 pi-usage backfill [--from D]   # walk pi sessions, re-emit any not in our ack store
-pi-usage login                 # OAuth device-code flow against the dashboard; writes config.json
-pi-usage logout
 pi-usage flush                 # force WAL drain
+pi-usage uninstall             # full uninstall: revoke server-side, remove
+                               # ~/.config/pi-usage/, patch ~/.pi/agent/settings.json
+                               # to remove the extension, optionally
+                               # `npm uninstall -g`
 pi-usage version
 ```
 
 `doctor` is the primary support tool — when a developer says "I'm not appearing on the dashboard," step one is paste the output of `pi-usage doctor`.
+
+The install path most developers actually take is **clicking 'Install' in the SPA**, which produces a curl one-liner. The CLI's `pi-usage login` is the alternative for terminal-only environments (CI, headless dev VMs); `pi-usage login --lab` is the alternative for the local lab. All three paths produce the same `~/.config/pi-usage/config.json`.
 
 
 ## 4. The OTel Collector
@@ -1186,8 +1209,7 @@ These commitments scope the **extension only**. The reference dashboard server's
 6. **Privacy default:** prompt content, tool args, tool outputs, file contents, shell output **never leave the developer machine**. Only tokens, cost, model, provider, stop reason, timestamps, identity, workspace metadata.
 7. **Defence in depth:** the extension enforces the schema by construction; downstream Collectors are expected to enforce it again with `attributes/redact`. The extension does not depend on the Collector for redaction — it never had the data in the first place.
 8. **Offline robustness via local WAL + backfill CLI.** No usage data lost short of disk failure.
-9. **Identity from `git config user.email`** by default, overridable via `PI_USAGE_USER_ID`. Per-machine UUID stored at `~/.config/pi-usage/machine-id`.
-10. **Lives in `vilosource/pi-extensions` monorepo** at `packages/pi-usage-reporter/`. Published as `@vilosource/pi-usage-reporter` to public npm. ([monorepo strategy](../strategy/pi-extensions-monorepo-STRATEGY.md))
+9. **Identity from JWT claims, asserted by the API.** Per [D13](../strategy/decisions-LOG.md), the extension reads only its bearer token from `~/.config/pi-usage/config.json` (or `PI_USAGE_TOKEN` env var); the API decodes the user identity from the JWT signature and writes it to `agent_spend_logs.user_id`. The previous `git config user.email` fallback is removed. Per-machine UUID stored at `~/.config/pi-usage/machine-id` (still per-machine, not per-user).10. **Lives in `vilosource/pi-extensions` monorepo** at `packages/pi-usage-reporter/`. Published as `@vilosource/pi-usage-reporter` to public npm. ([monorepo strategy](../strategy/pi-extensions-monorepo-STRATEGY.md))
 11. **Should also work in pi-mom** out of the box (same hook contract); to be verified in phase 0.2.
 12. **Multi-endpoint emit allowed but unadvertised.** Default is one endpoint, supplied by the deploying organization.
 13. **No knowledge of any specific backend's identity, schema, alerting, or RBAC model.** The extension emits standard OTel GenAI attributes plus a small `pi.*` namespace; what happens to those on the other end of the wire is outside its scope.
