@@ -6,9 +6,12 @@
 **Owner:** Platform / DevEx
 **Repo home:** [`vilosource/pi-extensions`](https://github.com/vilosource/pi-extensions), package `packages/pi-usage-reporter/`
 **Companion documents:**
-- Research: [`docs/research/usage-tracking-dashboard-RESEARCH.md`](../research/usage-tracking-dashboard-RESEARCH.md)
+- Strategy: [`docs/strategy/scope-and-deployment-STRATEGY.md`](../strategy/scope-and-deployment-STRATEGY.md) — the three-artifact split (extension, reference server, deployment)
 - Strategy: [`docs/strategy/pi-extensions-monorepo-STRATEGY.md`](../strategy/pi-extensions-monorepo-STRATEGY.md)
-- Strategy: [`docs/strategy/dashboard-backend-STRATEGY.md`](../strategy/dashboard-backend-STRATEGY.md)
+- Strategy: [`docs/strategy/dashboard-backend-STRATEGY.md`](../strategy/dashboard-backend-STRATEGY.md) — reference server backend architecture
+- Research: [`docs/research/usage-tracking-dashboard-RESEARCH.md`](../research/usage-tracking-dashboard-RESEARCH.md)
+
+> **Scope clarification.** Per the [scope and deployment strategy](../strategy/scope-and-deployment-STRATEGY.md), this document specifies **only the extension** (`@vilosource/pi-usage-reporter`). The extension is organization-agnostic. It speaks OTLP and reads config files. The OTel Collector, Postgres, Grafana, and SPA discussed in later sections describe the **reference dashboard server** that organizations may optionally deploy — they specify the *external contract* the extension expects on the other end of the wire, not its internal implementation. The reference server lives in a separate (future) repo at `vilosource/pi-usage-dashboard`. Optiscan's specific deployment of that reference server (Docker Swarm, Azure Managed Postgres, our company Grafana) is captured in a private Optiscan repo and is out of scope here.
 
 ---
 
@@ -16,7 +19,7 @@
 
 ### 1.1 Context
 
-Our company has standardised on **pi-mono** ([github.com/badlogic/pi-mono](https://github.com/badlogic/pi-mono)) as the coding-agent harness for all developers. Every engineer runs `pi` locally, against a mix of model providers (Anthropic, OpenAI, Google, Bedrock, GitHub Copilot, OpenRouter, internal vLLM pods served by `pi-pods`, etc.). The provider mix and the model mix change constantly — both because pi-mono adds providers and because individual developers swap models for different tasks.
+The extension exists for organizations whose developers use **pi-mono** ([github.com/badlogic/pi-mono](https://github.com/badlogic/pi-mono)) as their coding-agent harness. Every engineer running `pi` locally accumulates usage against a mix of model providers (Anthropic, OpenAI, Google, Bedrock, GitHub Copilot, OpenRouter, internal vLLM pods served by `pi-pods`, etc.). The provider mix and the model mix change constantly — both because pi-mono adds providers and because individual developers swap models for different tasks.
 
 Pi-mono already attaches a complete `Usage` object — input / output / cacheRead / cacheWrite tokens, plus per-bucket and total cost in USD — to every `AssistantMessage` and persists it to a per-session JSONL file at `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`. The repo even ships a reference parser at `scripts/cost.ts` that walks those files and prints a per-day-per-provider breakdown for a single machine.
 
@@ -24,17 +27,17 @@ That is the floor. The ceiling is what we do not have.
 
 ### 1.2 What we do not have
 
-We have **no organisation-level visibility** into who is spending what on which models on which projects. Specifically:
+We have **no organization-level visibility** into who is spending what on which models on which projects, in any organization that adopts pi without this extension. Specifically:
 
-1. **No cross-machine aggregation.** A developer running pi on a laptop, a desktop, a remote dev VM, and inside CI containers has four disconnected piles of JSONL files. Nobody — including the developer — has a unified picture of their own spend, let alone the team or the company.
-2. **No per-user attribution at the org level.** Provider invoices arrive monthly as a single line item per provider. We cannot tell whether a $4,200 Anthropic bill came from one developer who ran an autonomous overnight agent or from forty developers using normal interactive coding.
-3. **No per-project attribution.** We cannot answer "how much did we spend on the *karkkainen* migration this quarter?" without manually grepping every developer's laptop.
+1. **No cross-machine aggregation.** A developer running pi on a laptop, a desktop, a remote dev VM, and inside CI containers has four disconnected piles of JSONL files. Nobody — including the developer — has a unified picture of their own spend, let alone a team or organization.
+2. **No per-user attribution at the organization level.** Provider invoices arrive monthly as a single line item per provider. There is no way to tell whether a $4,200 Anthropic bill came from one developer who ran an autonomous overnight agent or from forty developers using normal interactive coding.
+3. **No per-project attribution.** No way to answer "how much did our team spend on the *karkkainen* migration this quarter?" without manually grepping every developer's laptop.
 4. **No per-team attribution.** Engineering managers cannot see their team's spend, set budgets, or compare cost-per-developer across teams.
-5. **No model-mix visibility.** We do not know how much of our spend is Opus vs. Sonnet vs. Haiku vs. GPT-5 vs. local models. We cannot make data-driven decisions about which model defaults to recommend, or where to invest in prompt engineering to drive cache hit rates.
+5. **No model-mix visibility.** Organizations do not know how much of their spend is Opus vs. Sonnet vs. Haiku vs. GPT-5 vs. local models. Without that, no data-driven decisions about which model defaults to recommend or where to invest in prompt engineering to drive cache hit rates.
 6. **No anomaly detection.** A developer who accidentally leaves an autonomous agent looping overnight against Opus 4.6 produces a $400 bill that nobody notices until the monthly invoice arrives. There is no real-time signal.
-7. **No budget enforcement.** Even if we knew, we have no mechanism to alert (let alone cap) per-user or per-team spend.
-8. **No cost-vs-billed reconciliation.** Local cost estimates from `pi-mono` (computed from the static `models.generated.ts` price table) drift from actual provider invoices because of plan discounts, free-tier credits, tier metadata (Bedrock service tiers, Vertex PayGo vs priority), routing through OpenRouter, and pricing changes. We have no way to quantify the drift, so we cannot trust either number for capacity planning.
-9. **No data residency or audit story.** If a customer or auditor asks "where do you keep records of which AI models touched this project's codebase?", we have no answer.
+7. **No budget enforcement.** Even with visibility, there is no mechanism to alert (let alone cap) per-user or per-team spend.
+8. **No cost-vs-billed reconciliation.** Local cost estimates from `pi-mono` (computed from the static `models.generated.ts` price table) drift from actual provider invoices because of plan discounts, free-tier credits, tier metadata (Bedrock service tiers, Vertex PayGo vs priority), routing through OpenRouter, and pricing changes. There is no way to quantify the drift, so neither number is trustworthy for capacity planning.
+9. **No data residency or audit story.** If a customer or auditor asks "where do you keep records of which AI models touched this project's codebase?", organizations have no answer.
 
 ### 1.3 Concrete user stories
 
@@ -56,14 +59,14 @@ The solution lives inside our specific environment and must respect:
 
 - **C1 — Pi as the only client.** Every developer uses pi-mono; the extension target is the pi extension API. No need to support Claude Code / Cursor / Codex ourselves.
 - **C2 — pi-mom on the same stack.** Our Slack bot uses `pi-mom`, which shares the `pi-ai`/`pi-agent-core` core. The same extension must work there with no changes (only the identity becomes "the bot account").
-- **C3 — Self-hosted.** Telemetry data leaves developer machines, but it stays inside our infrastructure. No third-party SaaS observability vendor for the data plane. (We can use SaaS for incidental things like Slack webhooks.)
+- **C3 — Self-hostable.** Organizations must be able to keep telemetry data inside their own infrastructure if they choose. The extension MUST work against any OTLP-compatible receiver (self-hosted reference server, Honeycomb, Datadog, Grafana Cloud, etc.) without code changes.
 - **C4 — Privacy floor.** Prompt content, tool arguments, tool outputs, file contents, and shell command output **MUST NOT leave the developer machine**, ever, by default. Configurable opt-in for individual developers who want fuller traces in their personal view, but never as a default.
 - **C5 — Offline tolerant.** Developers work on planes, in cafés, on broken VPNs. Telemetry must not block pi, must not lose data when the collector is unreachable, and must catch up on next online run.
 - **C6 — Zero added latency on the hot path.** Pi is interactive. Adding even 50 ms to each turn would be felt. Our hook handlers must be non-blocking (fire-and-forget into a buffer; flush on a timer or on session end).
 - **C7 — One-line install.** Developers should adopt this with `pi install <something>` and a single env var (the dashboard URL). If installation requires more than two manual steps, adoption will be uneven and we will lose the cross-org-visibility benefit.
 - **C8 — Compatible with the existing local CLI ecosystem.** [`@ccusage/pi`](https://www.npmjs.com/package/@ccusage/pi) already exists and developers already use it locally. Our extension must coexist; we do not break or replace local tools.
 - **C9 — No fork of pi-mono.** Distribute as a separate npm package, in the `vilosource/pi-extensions` monorepo (per the [monorepo strategy](../strategy/pi-extensions-monorepo-STRATEGY.md)). pi-mono is updated weekly and merge cost would dominate.
-- **C10 — Use the existing company Grafana for the ops view.** Per the [dashboard backend strategy](../strategy/dashboard-backend-STRATEGY.md) — no new platform to operate for ops dashboards and alerting.
+- **C10 — Pluggable backend; no organization-specific values in source.** Per the [scope and deployment strategy](../strategy/scope-and-deployment-STRATEGY.md), the extension is organization-agnostic. Endpoint URL, headers, and any backend choice are config-driven (env vars or `~/.config/pi-usage/config.json`). The extension works against the reference dashboard server, Honeycomb, Datadog, Grafana Cloud, or any OTLP-compatible receiver interchangeably. CI validates that no organization names, hostnames, or tokens appear in source.
 
 ### 1.5 Non-goals
 
@@ -91,7 +94,9 @@ We will know v1 has succeeded when:
 
 ## 2. High-level architecture
 
-The system has three concentric layers: every developer machine, our infrastructure, and the consumers of the data. Per the [dashboard backend strategy](../strategy/dashboard-backend-STRATEGY.md), the Collector fans out to two backends — Grafana for ops, Postgres for per-user/finance/audit.
+The system has three concentric layers: every developer machine, the deploying organization's infrastructure, and the consumers of the data. Per the [scope and deployment strategy](../strategy/scope-and-deployment-STRATEGY.md), the right-hand side of this diagram describes the **reference dashboard server** — a separate open-source project that an organization may optionally deploy. An organization that already has Honeycomb, Datadog, Grafana Cloud, or any OTLP-compatible receiver can point the extension straight at it and skip the reference server entirely; in that case only the left half of this diagram applies.
+
+When an organization does deploy the reference server, the [dashboard backend strategy](../strategy/dashboard-backend-STRATEGY.md) recommends the Grafana + Postgres dual backend shown here.
 
 ```mermaid
 flowchart LR
@@ -105,7 +110,7 @@ flowchart LR
 
   ext -->|"OTLP/HTTP\nbatched, TLS, bearer"| col
 
-  subgraph infra["Our infrastructure"]
+  subgraph infra["Reference dashboard server (deployed by the organization)"]
     direction TB
     col["OTel Collector\n(HA pair behind LB)"]
     pg[("Postgres\npi_spend_logs\n24mo hot")]
@@ -133,13 +138,13 @@ flowchart LR
 |---|---|---|---|
 | **pi-usage-reporter extension** | every developer machine, inside pi process | hook into pi events; convert `Usage` to OTel attributes; emit OTLP; persist WAL | TypeScript, npm package, `@opentelemetry/sdk-node` |
 | **WAL** | `~/.cache/pi-usage/wal.jsonl` | hold unsent events through outages | append-only JSONL |
-| **OTel Collector** | k8s in our infra (HA pair behind LB) | terminate TLS, validate auth, sample, route, batch, fan out | `otel/opentelemetry-collector-contrib` |
-| **Postgres** | k8s in our infra | durable spend log; team / user / budget tables | Postgres 16 |
-| **Mimir / Prometheus** | k8s, **existing company stack** | rolling 90-day metric store for Grafana / alerts | Mimir or Prometheus + remote-write from Collector |
-| **Tempo** | k8s, **existing company stack** | per-turn span store for "show me this session" | Tempo or any OTLP-compatible trace store |
-| **Pi Usage API** | k8s in our infra | REST + SSE; SSO + RBAC; renders aggregations | Node + Express + `pg` |
+| **OTel Collector** | wherever the deploying organization runs it | terminate TLS, validate auth, sample, route, batch, fan out | `otel/opentelemetry-collector-contrib` |
+| **Postgres** | wherever the deploying organization runs it | durable spend log; team / user / budget tables | Postgres 14+ (any flavor: managed, self-hosted, sqlite for solo) |
+| **Mimir / Prometheus** | the deploying organization's existing stack, if present | rolling 90-day metric store for Grafana / alerts | Mimir / Prometheus / Grafana Cloud / equivalent |
+| **Tempo** | the deploying organization's existing stack, if present | per-turn span store for "show me this session" | Tempo or any OTLP-compatible trace store |
+| **Pi Usage API** | the deploying organization's infrastructure | REST + SSE; SSO + RBAC; renders aggregations | Node + Express + `pg` |
 | **Pi Usage Dashboard SPA** | served by API | the human UI for per-user/team/finance | Svelte + Tailwind |
-| **Grafana** | **existing company instance** | ops + power-user view; pre-built JSON dashboards we ship | Grafana OSS |
+| **Grafana** | the deploying organization's existing instance | ops + power-user view; pre-built JSON dashboards shipped with the reference server | Grafana OSS / Cloud / Enterprise |
 
 ### 2.2 Key data-flow rules
 
@@ -582,7 +587,7 @@ The bare-minimum `config.json` for a developer:
 
 ```json
 {
-  "endpoint": "https://otel.internal.viloforge.com",
+  "endpoint": "https://<organization-collector-host>",
   "token":    "eyJhbGciOiJIUzI1...",
   "enabled":  true
 }
@@ -606,14 +611,14 @@ Operator-tunable knobs (env vars, all optional):
 The single-endpoint case (>99% of developers):
 
 ```bash
-PI_USAGE_ENDPOINT=https://otel.internal.viloforge.com
+PI_USAGE_ENDPOINT=https://<organization-collector-host>
 PI_USAGE_TOKEN=<from `pi-usage login`>
 ```
 
 The multi-endpoint case (rare; allowed for personal tinkering per [dashboard backend strategy §4](../strategy/dashboard-backend-STRATEGY.md)):
 
 ```bash
-PI_USAGE_ENDPOINT=https://otel.internal.viloforge.com,https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
+PI_USAGE_ENDPOINT=https://<organization-collector-host>,https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
 PI_USAGE_HEADERS_1='Authorization=Bearer <company token>'
 PI_USAGE_HEADERS_2='Authorization=Basic <grafana cloud token>'
 ```
@@ -776,7 +781,7 @@ for f in packages/pi-usage-reporter/grafana/dashboards/*.json; do
   curl -X POST -H "Authorization: Bearer $GRAFANA_TOKEN" \
        -H "Content-Type: application/json" \
        -d @"$f" \
-       https://grafana.internal.viloforge.com/api/dashboards/db
+       https://<grafana-host>/api/dashboards/db
 done
 ```
 
@@ -1032,7 +1037,7 @@ The Collector reads the user → team map from a Kubernetes ConfigMap. The API r
 
 - **API:** Node 22 + Express + `pg` + `jose` (JWT) + `passport-openidconnect` (SSO).
 - **SPA:** Svelte 5 + TailwindCSS 4 + Chart.js (for line and donut charts). No build step heavier than `vite build`.
-- **Hosting:** k8s in our infra. Two API pods behind a Service; SPA served as static assets from the API itself (no separate ingress).
+- **Hosting:** wherever the deploying organization runs services. Two API pods (or two Compose replicas) behind a Service / Traefik / Caddy / equivalent; SPA served as static assets from the API itself (no separate ingress).
 - **Database:** the same Postgres cluster the Collector writes to. Read-only role for the API user.
 
 
@@ -1155,7 +1160,7 @@ Per-phase exit criteria:
 
 These are explicitly deferred until the spike (phase 0.1) gives us empirical data.
 
-1. **Where does the OTel Collector run?** On-prem k8s in our infra, or managed (Grafana Cloud free tier supports OTLP)? Both work; affects ops burden but not design.
+1. **Where does the OTel Collector run?** Anywhere the deploying organization runs services — k8s, Docker Compose, Docker Swarm, a bare VM, or a managed OTLP backend (Grafana Cloud, Honeycomb, etc.). The reference server ships multiple deployment recipes; the extension does not care which one was picked.
 2. **Single-tenant vs multi-tenant ingest?** Per-team collectors (clean blast radius, more ops) or one big collector with tenant routing (cheaper, must enforce auth strictly). Default: one collector with per-team bearer tokens.
 3. **What about pi-mom?** mom uses the same `pi-ai`/`pi-agent-core` stack. Same extension *should* work because the hook contract is identical — to be verified as part of phase 0.2.
 4. **Per-provider quirks.** Bedrock cost reporting can include "service tier" metadata; OpenRouter routes through other providers and re-attributes. Need to validate that pi-mono's `Usage.cost.total` actually reflects upstream-billed cost in those cases. The mykb area for pi-mono already lists a related fix (commit `45354153`: "capture usage from `choice.usage` for non-standard OpenAI-compatible providers"), suggesting this surface still has rough edges.
@@ -1166,20 +1171,21 @@ These are explicitly deferred until the spike (phase 0.1) gives us empirical dat
 
 ## 10. Decisions this document commits to
 
-1. **Wire format:** OpenTelemetry GenAI semantic conventions over OTLP/HTTP. No custom protocol. ([dashboard backend strategy §9.1](../strategy/dashboard-backend-STRATEGY.md))
-2. **Compatible with `@ccusage/pi`.** The extension does not replace local CLI tools; both can run.
-3. **Per-turn emit on `message_end`**, with a session-level span on `session_start` / `session_shutdown`.
-4. **Three storage tiers:** OTel Collector (transport) → Mimir + Tempo (existing company Grafana) + Postgres (durable spend log, custom schema).
-5. **Custom SPA** for per-user / per-team / finance / audit views. **Existing company Grafana** for ops / alerts / team rollups. Three roles (developer / team_lead / admin), SSO via the company IdP.
+These commitments scope the **extension only**. The reference dashboard server's commitments live in [`dashboard-backend-STRATEGY.md`](../strategy/dashboard-backend-STRATEGY.md). Optiscan-specific deployment commitments live in a private Optiscan repo per the [scope and deployment strategy](../strategy/scope-and-deployment-STRATEGY.md).
+
+1. **Wire format:** OpenTelemetry GenAI semantic conventions over OTLP/HTTP. The extension speaks OTLP and only OTLP.
+2. **Organization-agnostic.** No URLs, hostnames, organization names, IdPs, or tokens hardcoded in source. Every backend-specific value is config-driven (env var or `~/.config/pi-usage/config.json`). CI validates this.
+3. **Compatible with `@ccusage/pi`.** The extension does not replace local CLI tools; both can run.
+4. **Per-turn emit on `message_end`**, with a session-level span on `session_start` / `session_shutdown`.
+5. **Backend pluggability** is the extension's whole point. It works against the reference dashboard server, Honeycomb, Datadog, Grafana Cloud, signoz, or a homemade OTLP receiver interchangeably.
 6. **Privacy default:** prompt content, tool args, tool outputs, file contents, shell output **never leave the developer machine**. Only tokens, cost, model, provider, stop reason, timestamps, identity, workspace metadata.
-7. **Defence in depth:** extension enforces the schema by construction; Collector enforces it again with `attributes/redact`.
+7. **Defence in depth:** the extension enforces the schema by construction; downstream Collectors are expected to enforce it again with `attributes/redact`. The extension does not depend on the Collector for redaction — it never had the data in the first place.
 8. **Offline robustness via local WAL + backfill CLI.** No usage data lost short of disk failure.
 9. **Identity from `git config user.email`** by default, overridable via `PI_USAGE_USER_ID`. Per-machine UUID stored at `~/.config/pi-usage/machine-id`.
-10. **Live in `vilosource/pi-extensions` monorepo** at `packages/pi-usage-reporter/`. Published as `@vilosource/pi-usage-reporter` to public npm. ([monorepo strategy](../strategy/pi-extensions-monorepo-STRATEGY.md))
+10. **Lives in `vilosource/pi-extensions` monorepo** at `packages/pi-usage-reporter/`. Published as `@vilosource/pi-usage-reporter` to public npm. ([monorepo strategy](../strategy/pi-extensions-monorepo-STRATEGY.md))
 11. **Should also work in pi-mom** out of the box (same hook contract); to be verified in phase 0.2.
-12. **Grafana Alerting handles real-time alerts for v1** via existing Slack / on-call routing. Custom alert evaluator deferred until needed.
-13. **Multi-endpoint emit allowed but unadvertised.** Default is one endpoint (the company Collector).
-14. **Backend choice is a Collector config change, never an extension change.** Documented exporters: Postgres, Prometheus remote_write, OTLP (Tempo, Honeycomb, Datadog, etc.).
+12. **Multi-endpoint emit allowed but unadvertised.** Default is one endpoint, supplied by the deploying organization.
+13. **No knowledge of any specific backend's identity, schema, alerting, or RBAC model.** The extension emits standard OTel GenAI attributes plus a small `pi.*` namespace; what happens to those on the other end of the wire is outside its scope.
 
 ---
 

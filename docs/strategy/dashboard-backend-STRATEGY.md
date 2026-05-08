@@ -1,24 +1,28 @@
-# Dashboard Backend Strategy — Grafana + Postgres Dual Backend
+# Reference Dashboard Server — Backend Architecture Strategy
 
 **Document type:** Strategy
 **Status:** Accepted
 **Date:** 2026-05-08
 **Owner:** Platform / DevEx
 **Workspace:** `pi-dev`
-**Related:** [`pi-extensions-monorepo-STRATEGY.md`](pi-extensions-monorepo-STRATEGY.md), the upcoming `docs/design/pi-usage-reporter-DESIGN.md`
+**Related:** [`scope-and-deployment-STRATEGY.md`](scope-and-deployment-STRATEGY.md), [`pi-extensions-monorepo-STRATEGY.md`](pi-extensions-monorepo-STRATEGY.md), [`../design/pi-usage-reporter-DESIGN.md`](../design/pi-usage-reporter-DESIGN.md)
+
+> **Scope clarification.** Per the [scope and deployment strategy](scope-and-deployment-STRATEGY.md), this document describes the **reference dashboard server** — a future open-source project at `vilosource/pi-usage-dashboard`. It is one of several possible OTLP-compatible backends an organization can point the extension at. **The extension itself is organization-agnostic** and works against Honeycomb, Datadog, Grafana Cloud, a homemade receiver, or this reference server interchangeably. Optiscan's own deployment of the reference server (Docker Swarm + Azure Managed Postgres + company Grafana) is captured in a private Optiscan repo and is out of scope here.
 
 ## 1. Decision
 
-The `pi-usage-reporter` extension emits OpenTelemetry over OTLP/HTTP to a single company-operated **OTel Collector**. The Collector fans out to **two backends**, each used for what it is best at:
+The **reference dashboard server** is built around an **OTel Collector that fans out to two backends**, each used for what it is best at:
 
-- **Grafana stack (Mimir / Tempo / Loki)** — operational view, real-time alerting, on-call routing. Uses the **existing company Grafana instance** — no new platform to operate.
-- **Postgres** — durable per-turn spend log for finance reconciliation, per-user dashboard, audit export, long-term retention.
+- **Grafana stack (Mimir / Tempo / Loki)** — operational view, real-time alerting, on-call routing. Wired to whatever Grafana / Mimir / Tempo the deploying organization already runs (or skipped entirely if they don't have one).
+- **Postgres** — durable per-turn spend log for finance reconciliation, per-user dashboard, audit export, long-term retention. Connection-string driven; works with any Postgres (managed or self-hosted).
 
-The extension itself remains backend-agnostic. Switching, adding, or removing a backend is a Collector configuration change on one server, not a code change on every developer's machine.
+The **extension** itself stays backend-agnostic and emits only OTLP. Switching, adding, or removing a backend is a Collector configuration change on the deploying organization's side — not a code change on every developer's machine.
+
+Every organization-specific value (Grafana URL, Mimir remote-write token, Postgres connection string, IdP, public hostname) is an environment-variable knob in the reference server. There are **no hardcoded URLs, hostnames, or tokens** in either the extension or the reference server.
 
 ## 2. The mental model
 
-The pipeline. The extension speaks OTLP; the Collector chooses where the data lands. This diagram shows the recommended Shape 3 (both backends).
+The pipeline. The extension speaks OTLP; the deploying organization's Collector chooses where the data lands. This diagram shows the recommended Shape 3 (both backends) as it would look for any organization that has a Grafana stack and wants the per-user / finance / audit surface as well.
 
 ```mermaid
 flowchart LR
@@ -73,7 +77,7 @@ flowchart LR
   tempo --> graf
 ```
 
-**Pros:** uses existing company Grafana; pre-built panels and alerting; on-call wiring already exists.
+**Pros:** uses the deploying organization's existing Grafana; pre-built dashboard JSON shipped with the reference server; alerting and on-call wiring use whatever Grafana Alerting routes the organization already has.
 **Cons:** Mimir is a rolling time-series store, not an audit log (default 30-90 day retention; long retention is expensive). PromQL is awkward for relational queries ("top 10 projects by cost this quarter joined to team mapping"). Per-user RBAC ("developer A sees only their own data") is not Grafana's strength — its permissions model is per-folder/per-dashboard, not per-row.
 
 **Best for:** ops view, real-time alerting, team-level rollups.
@@ -120,47 +124,51 @@ flowchart LR
 
 This is the same shape large LLM operators converged on, and it matches the official Anthropic recommendation for Claude Code's first-party telemetry path (see [Anthropic CC Analytics docs](https://code.claude.com/docs/en/analytics) and [Sealos' worked example](https://sealos.io/blog/claude-code-metrics/)).
 
+For a deploying organization that has only Grafana, choosing **Shape 1** is fine — they skip the Postgres exporter and lose the per-row / finance views, but the ops view works. For an organization that has neither, **Shape 2** with sqlite-or-Postgres-only is also valid — they lose Grafana panels but get the SPA. The reference server supports all three shapes via configuration.
+
 ## 4. What the extension exposes for backend choice
 
 The extension stays single-config-line for normal users. The knobs exist for unusual cases.
 
 ```mermaid
 flowchart TB
-  cfg["~/.config/pi-usage/config.json\nor PI_USAGE_* env vars"]
-  cfg --> endpoint["PI_USAGE_ENDPOINT\n(comma-separated for multi-emit)"]
-  cfg --> token["PI_USAGE_TOKEN\n(or PI_USAGE_HEADERS for arbitrary headers)"]
-  endpoint --> sdk["OTel SDK\nOTLPTraceExporter\nOTLPMetricExporter"]
+  cfg["~/.config/pi-usage/config.json<br/>or PI_USAGE_* env vars"]
+  cfg --> endpoint["PI_USAGE_ENDPOINT<br/>(comma-separated for multi-emit)"]
+  cfg --> token["PI_USAGE_TOKEN<br/>(or PI_USAGE_HEADERS for arbitrary headers)"]
+  endpoint --> sdk["OTel SDK<br/>OTLPTraceExporter<br/>OTLPMetricExporter"]
   token --> sdk
-  sdk -->|"primary (default)"| company["Company Collector\n→ Mimir + Tempo + Postgres"]
-  sdk -.->|"optional second exporter"| personal["Personal Grafana Cloud /\nHoneycomb / Jaeger"]
+  sdk -->|primary| chosen["Whatever the deploying<br/>organization chose:<br/>reference server,<br/>Honeycomb, Datadog,<br/>Grafana Cloud, etc."]
+  sdk -.->|optional second| personal["Personal observability<br/>stack (rare)"]
 ```
 
-Default for every developer:
+A typical developer's config has one endpoint, supplied by their organization:
 
 ```bash
-PI_USAGE_ENDPOINT=https://otel.internal.viloforge.com
+PI_USAGE_ENDPOINT=https://<organization-collector-host>
 PI_USAGE_TOKEN=<from `pi-usage login`>
 ```
 
 Multi-endpoint (rare; for personal tinkering):
 
 ```bash
-PI_USAGE_ENDPOINT=https://otel.internal.viloforge.com,https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
-PI_USAGE_HEADERS_1='Authorization=Bearer <company token>'
+PI_USAGE_ENDPOINT=https://<org-collector>,https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
+PI_USAGE_HEADERS_1='Authorization=Bearer <org token>'
 PI_USAGE_HEADERS_2='Authorization=Basic <grafana cloud token>'
 ```
 
-99% of developers will never set the second form. It exists so a curious engineer can tee their own data into a personal observability stack without our blessing — explicitly allowed, never required.
+99% of developers will never set the second form. It exists so a curious engineer can tee their own data into a personal observability stack without their organization's blessing — explicitly allowed, never required.
 
-## 5. What changes versus a "Postgres-only" design
+## 5. What changes versus a "Postgres-only" reference server
 
-If we had not had a company Grafana, the design would have been Shape 2: Postgres + custom SPA + custom alert evaluator. The presence of Grafana lets us:
+A reference server that ships only Postgres + SPA + custom alerting is viable; it would be roughly equivalent to LiteLLM's UI in shape. Adding Grafana support to the reference server lets a deploying organization that already has Grafana:
 
-1. **Skip the alert evaluator for v1.** Use Grafana Alerting + existing Slack / on-call routing. Saves ~300 LOC and one service to operate.
-2. **Defer the "ops view" pages of the SPA.** Real-time burn-rate and team rollup graphs are already what Grafana is best at — we author the dashboard JSON once and ship it as part of the package (`packages/pi-usage-reporter/grafana/dashboards/*.json`).
-3. **Get a working dashboard URL on day 1, not week 4.** Grafana is already up; we just need the Collector and a metric flowing.
+1. **Skip the custom alert evaluator.** Use Grafana Alerting + their existing Slack / on-call routing. Saves ~300 LOC and one service to operate.
+2. **Defer the "ops view" pages of the SPA.** Real-time burn-rate and team rollup graphs are what Grafana is best at — we ship dashboard JSON in the reference server's repo so any organization can `grafana-cli dashboard import` them.
+3. **Get a working dashboard URL fast.** If Grafana is already up, the deploying organization just needs the Collector and a metric flowing.
 
-The SPA's scope shrinks to what only it can do: per-user views, per-developer drill-in, finance exports, RBAC. That is roughly half the SPA work the Postgres-only shape would have required.
+The SPA's scope shrinks to what only it can do: per-user views, per-developer drill-in, finance exports, RBAC. That is roughly half the SPA work the Postgres-only shape would require.
+
+For an organization without Grafana, the reference server still works in **Shape 2**: Postgres-only, with the SPA's ops pages becoming load-bearing rather than supplementary. Both shapes are supported; the dashboards JSON is just optional.
 
 ## 6. Phased delivery (revised)
 
@@ -184,11 +192,11 @@ gantt
   1.0 GA, retention, audit export       :p07, after p06, 5d
 ```
 
-The order is the load-bearing change. **Grafana first** means we can show real numbers in your existing dashboards within ~10 working days of starting, before any custom UI exists.
+The order is the load-bearing change. **Grafana first** means a deploying organization with an existing Grafana stack can see real numbers in their existing dashboards within ~10 working days of starting, before any custom UI exists. Organizations without Grafana follow the same gantt but skip phase 0.2 and start at 0.3.
 
 ## 7. Caveats, called out explicitly
 
-Grafana is **not** the right tool for these specific needs, no matter how good the dashboards look. These drive the SPA and Postgres existing alongside Grafana, not replacing it.
+Grafana is **not** the right tool for these specific needs, no matter how good the dashboards look. These drive the SPA and Postgres existing alongside Grafana in the reference server, not replacing it.
 
 | Limitation of Grafana for this use case | Why we still need Postgres + SPA |
 |---|---|
@@ -216,12 +224,13 @@ Concrete YAML lives in the design doc (§4). The point here: each exporter is in
 ## 9. Decisions this document commits to
 
 1. **Wire format:** OTLP/HTTP only. The extension never speaks anything else.
-2. **Shape 3 by default:** Mimir + Tempo for ops/alerts via existing company Grafana; Postgres for per-user dashboard, finance, audit.
-3. **Existing company Grafana, not a new one.** No new platform to operate for the ops view.
-4. **Grafana dashboards shipped as JSON in the package** at `packages/pi-usage-reporter/grafana/dashboards/`. Anyone can `grafana-cli dashboard import` them.
-5. **Grafana Alerting handles real-time burn-rate and budget alerts** for v1, routed through existing Slack / on-call. Custom alert evaluator deferred until we have a need Grafana can't meet.
-6. **SPA scope is per-user, per-team, per-project, finance, audit.** Not ops dashboards (Grafana owns those).
-7. **Multi-endpoint emit allowed but unadvertised.** `PI_USAGE_ENDPOINT` accepts a comma-separated list; default is one endpoint (the company Collector).
-8. **Backend choice is a Collector config change, never an extension change.** Documented exporters: Postgres, Prometheus remote_write, OTLP (for Tempo, Honeycomb, Datadog, etc.).
-9. **Order of delivery: Grafana first, Postgres + SPA second.** Maximises time-to-value.
+2. **Reference server defaults to Shape 3:** Mimir + Tempo + Postgres. Shape 1 (Grafana only) and Shape 2 (Postgres only) are also supported via configuration.
+3. **The reference server uses the deploying organization's existing Grafana** when one is present. It never operates its own Grafana instance.
+4. **Grafana dashboards shipped as JSON in the reference server's repo.** Any organization can `grafana-cli dashboard import` them.
+5. **Grafana Alerting handles real-time burn-rate and budget alerts** for v1 in deployments that have it, routed through whatever Slack / on-call the deploying organization already uses. A custom alert evaluator is deferred until there is a documented need Grafana can't meet.
+6. **SPA scope is per-user, per-team, per-project, finance, audit.** Not ops dashboards (Grafana owns those when present; the SPA promotes its ops surface only in deployments without Grafana).
+7. **Multi-endpoint emit allowed but unadvertised.** `PI_USAGE_ENDPOINT` accepts a comma-separated list; the typical case is one endpoint chosen by the deploying organization.
+8. **Backend choice is a Collector config change, never an extension change.** Reference-server exporters documented: Postgres, Prometheus remote_write, OTLP (for Tempo, Honeycomb, Datadog, etc.). The extension does not know which the organization picked.
+9. **Order of delivery for organizations that have Grafana: Grafana first, Postgres + SPA second.** For organizations without, start at Postgres + SPA. Either path is supported by the same reference server.
 10. **No metrics duplicated to multiple stores.** Each metric lives in exactly one of Mimir or Postgres (it's the same data, but different aggregation grain — Mimir holds histogram aggregates, Postgres holds per-row events). The dashboards are designed so a question is answered by exactly one backend.
+11. **No organization-specific values in the reference server source.** Every URL, token, and identifier is environment-variable driven. CI validates this.

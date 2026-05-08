@@ -20,7 +20,7 @@ Each package can be installed individually from npm:
 pi install npm:@vilosource/pi-usage-reporter
 ```
 
-Or, for our internal developers, install the curated bundle:
+Or, for a curated bundle of the whole repo:
 
 ```bash
 pi install git:github.com/vilosource/pi-extensions
@@ -36,8 +36,9 @@ Cross-cutting decisions that apply to every package in this repo.
 
 | Doc | Subject |
 |---|---|
+| [`scope-and-deployment-STRATEGY.md`](docs/strategy/scope-and-deployment-STRATEGY.md) | Three-artifact split (extension, reference dashboard server, organization deployments). Read this first. |
 | [`pi-extensions-monorepo-STRATEGY.md`](docs/strategy/pi-extensions-monorepo-STRATEGY.md) | Why monorepo, why npm workspaces, naming conventions, tooling, release flow |
-| [`dashboard-backend-STRATEGY.md`](docs/strategy/dashboard-backend-STRATEGY.md) | Grafana + Postgres dual backend for telemetry; phased delivery order |
+| [`dashboard-backend-STRATEGY.md`](docs/strategy/dashboard-backend-STRATEGY.md) | Reference dashboard server: Grafana + Postgres dual backend; phased delivery order |
 
 ### Design
 
