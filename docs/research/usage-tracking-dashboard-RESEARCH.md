@@ -16,7 +16,7 @@
 
 ## TL;DR
 
-pi-mono already produces, on every assistant turn, a complete `Usage` object (input / output / cacheRead / cacheWrite tokens + per-bucket and total cost) attached to each `AssistantMessage` and persisted to `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`. The repo ships a [`scripts/cost.ts`](../../scripts/cost.ts) reference parser. **The data is already there; the work is in shipping it off-machine in real time and aggregating it across developers.**
+pi-mono already produces, on every assistant turn, a complete `Usage` object (input / output / cacheRead / cacheWrite tokens + per-bucket and total cost) attached to each `AssistantMessage` and persisted to `~/.pi/agent/sessions/<encoded-cwd>/<timestamp>_<uuid>.jsonl`. The repo ships a [`scripts/cost.ts`](https://github.com/badlogic/pi-mono/blob/main/scripts/cost.ts) reference parser. **The data is already there; the work is in shipping it off-machine in real time and aggregating it across developers.**
 
 The field has converged on a clear pattern for this exact problem (Claude Code did it first, ccusage built the de-facto tooling, and the **OpenTelemetry GenAI semantic conventions** are now the standard wire format). For our extension we recommend:
 
@@ -37,7 +37,7 @@ All claims below are taken from pages fetched on 2026-05-08 plus direct inspecti
 
 ### 1.1 The `Usage` type
 
-In [`packages/ai/src/types.ts`](../../packages/ai/src/types.ts):
+In [`packages/ai/src/types.ts`](https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/types.ts):
 
 ```ts
 export interface Usage {
@@ -78,7 +78,7 @@ So **per-turn we already have**: provider, model, api, all four token buckets, a
 
 ### 1.3 Cost calculation
 
-In [`packages/ai/src/models.ts`](../../packages/ai/src/models.ts):
+In [`packages/ai/src/models.ts`](https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/models.ts):
 
 ```ts
 export function calculateCost<TApi extends Api>(model: Model<TApi>, usage: Usage): Usage["cost"] {
@@ -120,7 +120,7 @@ Each line is a structured event. Per `scripts/cost.ts` line 88-104 the relevant 
 
 ### 1.5 Pi extension events relevant to usage tracking
 
-From [`packages/coding-agent/src/core/extensions/types.ts`](../../packages/coding-agent/src/core/extensions/types.ts):
+From [`packages/coding-agent/src/core/extensions/types.ts`](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/extensions/types.ts):
 
 | Event | When | Useful for |
 |---|---|---|
@@ -138,7 +138,7 @@ The `message_end` event hands you the full `AgentMessage` object including the `
 
 ### 1.6 The reference parser
 
-[`scripts/cost.ts`](../../scripts/cost.ts) is the in-repo reference for offline aggregation: walks `~/.pi/agent/sessions/<cwd>/*.jsonl`, filters `type=="message" && role=="assistant" && usage.cost`, groups by day × provider, prints a per-day-per-provider breakdown plus grand total. Useful as a sanity check against whatever we build, and as the basis for a "backfill historical sessions" command.
+[`scripts/cost.ts`](https://github.com/badlogic/pi-mono/blob/main/scripts/cost.ts) is the in-repo reference for offline aggregation: walks `~/.pi/agent/sessions/<cwd>/*.jsonl`, filters `type=="message" && role=="assistant" && usage.cost`, groups by day × provider, prints a per-day-per-provider breakdown plus grand total. Useful as a sanity check against whatever we build, and as the basis for a "backfill historical sessions" command.
 
 
 ## 2. The state of the art — what other harnesses do (mid-2026)
@@ -437,7 +437,7 @@ The OTel GenAI spec is intentionally cost-agnostic (cost belongs to the operator
 | Attribute | Type | Why |
 |---|---|---|
 | `agent.user.id` | string | who incurred the spend (email or LDAP id) |
-| `pi.user.team` | string | for team-level budgeting |
+| `agent.user.team` | string | for team-level budgeting |
 | `agent.machine.id` | string | host fingerprint for multi-machine attribution |
 | `agent.session.id` | string | pi session UUID — joins to local JSONL on disk |
 | `agent.workspace.cwd` | string | the working directory pi was launched from (= "project" for us) |
@@ -461,7 +461,7 @@ Order of precedence for `agent.user.id`:
 2. `git config user.email` (most developers have this set).
 3. `$USER@$(hostname)` (last-resort fallback).
 
-`pi.user.team` is mapped via a small static lookup: `~/.config/pi-usage/team-map.json` (operator-managed) or, better, returned by the dashboard server based on the user id at the first sync. Avoids hard-coding org structure into developer machines.
+`agent.user.team` is mapped via a small static lookup: `~/.config/pi-usage/team-map.json` (operator-managed) or, better, returned by the dashboard server based on the user id at the first sync. Avoids hard-coding org structure into developer machines.
 
 `agent.machine.id` is a stable per-machine UUID stored at `~/.config/pi-usage/machine-id` (created once on first run). Allows identifying laptops separately from CI runners under the same user id.
 
@@ -642,9 +642,9 @@ Mirroring Anthropic's stance from §2.4:
 
 In recommended order for whoever picks up implementation:
 
-1. [pi-mono `scripts/cost.ts`](../../scripts/cost.ts) — the in-repo reference parser; everything we need to know about the data shape
-2. [pi-mono `packages/ai/src/types.ts` Usage / AssistantMessage](../../packages/ai/src/types.ts) — the source schema
-3. [pi-mono `packages/ai/src/models.ts` calculateCost()](../../packages/ai/src/models.ts) — the cost formula
+1. [pi-mono `scripts/cost.ts`](https://github.com/badlogic/pi-mono/blob/main/scripts/cost.ts) — the in-repo reference parser; everything we need to know about the data shape
+2. [pi-mono `packages/ai/src/types.ts` Usage / AssistantMessage](https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/types.ts) — the source schema
+3. [pi-mono `packages/ai/src/models.ts` calculateCost()](https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/models.ts) — the cost formula
 4. [OpenTelemetry GenAI semantic conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/) — the wire format
 5. [OpenTelemetry GenAI Anthropic-specific extension](https://opentelemetry.io/docs/specs/semconv/gen-ai/anthropic/) — the recommended attributes incl. cache fields
 6. [Anthropic Claude Code Analytics docs](https://code.claude.com/docs/en/analytics) — confirms OTel as the official path
@@ -654,7 +654,7 @@ In recommended order for whoever picks up implementation:
 10. [`m-shirt/claude-code-tracker`](https://github.com/m-shirt/claude-code-tracker) — self-hosted multi-user pattern; auth + role model
 11. [LiteLLM Spend Tracking docs](https://docs.litellm.ai/docs/proxy/cost_tracking) — borrow the `LiteLLM_SpendLogs` schema for our Postgres rows
 12. [Langfuse vs Phoenix vs Helicone (2026)](https://open-techstack.com/blog/langfuse-vs-phoenix-vs-helicone-llm-observability-2026/) — decide whether to plug in any of these as an alternative UI
-13. [pi-mono extension type definitions](../../packages/coding-agent/src/core/extensions/types.ts) — the full hook surface
+13. [pi-mono extension type definitions](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/extensions/types.ts) — the full hook surface
 
 ## 10. Decisions this document commits to (subject to review)
 

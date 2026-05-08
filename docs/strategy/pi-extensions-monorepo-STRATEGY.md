@@ -99,7 +99,7 @@ Public extension:
     "check": "biome check --write . && tsc --noEmit && vitest run"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.30.0"
+    "@mariozechner/pi-coding-agent": ">=0.52.0"
   }
 }
 ```

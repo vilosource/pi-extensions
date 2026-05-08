@@ -32,14 +32,14 @@ flowchart LR
     pi -->|hooks| ext
   end
 
-  col["OTel Collector\n(HA pair, OTLP/HTTP)"]
+  col["OTel Collector<br/>(HA pair, OTLP/HTTP)"]
   ext -->|OTLP/HTTP, batched, TLS| col
 
   subgraph backends["Backends — chosen via Collector config"]
     direction TB
-    mimir[("Mimir / Prometheus\nmetrics, 90d")]
-    tempo[("Tempo\ntraces, 14d")]
-    pg[("Postgres\nspend log, 24mo")]
+    mimir[("Mimir / Prometheus<br/>metrics, 90d")]
+    tempo[("Tempo<br/>traces, 14d")]
+    pg[("Postgres<br/>spend log, 24mo")]
   end
 
   col --> mimir
@@ -48,8 +48,8 @@ flowchart LR
 
   subgraph consumers["Consumers"]
     direction TB
-    graf["Grafana\n(existing company instance)"]
-    spa["Pi Usage SPA\n(custom, per-user RBAC)"]
+    graf["Grafana<br/>(existing company instance)"]
+    spa["Agent Spend SPA<br/>(custom, per-user RBAC)"]
     finance["Finance / audit exports"]
   end
 
@@ -212,11 +212,11 @@ The Collector pipeline gains exporters for both backends. The extension does not
 
 ```mermaid
 flowchart TB
-  recv["OTLP/HTTP receiver\n:4318, TLS, bearer auth"]
-  recv --> proc["Processors:\n• filter/sanity\n• attributes/redact\n• batch\n• transform/team_lookup"]
-  proc --> exp_pg["Postgres exporter\n→ agent_spend_logs"]
-  proc --> exp_prom["Prometheus remote_write\n→ company Mimir"]
-  proc --> exp_tempo["OTLP exporter\n→ company Tempo"]
+  recv["OTLP/HTTP receiver<br/>:4318, TLS, bearer auth"]
+  recv --> proc["Processors:<br/>• filter/sanity<br/>• attributes/redact<br/>• batch<br/>• transform/team_lookup"]
+  proc --> exp_pg["Postgres exporter<br/>→ agent_spend_logs"]
+  proc --> exp_prom["Prometheus remote_write<br/>→ company Mimir"]
+  proc --> exp_tempo["OTLP exporter<br/>→ company Tempo"]
 ```
 
 Concrete YAML lives in the design doc (§4). The point here: each exporter is independently enable/disable-able. We can run Shape 1 today (drop the Postgres exporter), Shape 3 next month (re-enable it), Shape 2 if Grafana ever goes away (drop Mimir and Tempo). **Same extension, same wire format.**

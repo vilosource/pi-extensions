@@ -16,6 +16,16 @@
 docs/strategy/scope-and-deployment-STRATEGY.md
 docs/strategy/public-boundary-STRATEGY.md
 
+# Strategy doc that names Optiscan in a single scope-clarification banner
+# ("Optiscan's own deployment is out of scope here"). The naming is
+# intentional and clarifies the doc's audience.
+docs/strategy/dashboard-backend-STRATEGY.md
+
+# Decisions log records Optiscan-specific decisions explicitly (D1, D2-D4)
+# precisely because they are Optiscan-specific. The whole point of these
+# entries is to record the boundary between public and private decisions.
+docs/strategy/decisions-LOG.md
+
 # The CI script itself contains the denylist regexes, which include the
 # patterns we are forbidding elsewhere.
 scripts/check-public-boundary.sh

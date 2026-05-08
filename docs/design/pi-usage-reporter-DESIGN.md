@@ -104,23 +104,23 @@ When an organization does deploy the reference server, the [dashboard backend st
 flowchart LR
   subgraph dev["Developer machine"]
     pi["pi / pi-mom / CI runner"]
-    ext["pi-usage-reporter\nextension"]
-    wal[("~/.cache/pi-usage/\nwal.jsonl")]
+    ext["pi-usage-reporter<br/>extension"]
+    wal[("~/.cache/pi-usage/<br/>wal.jsonl")]
     pi -->|hooks| ext
     ext -->|append| wal
   end
 
-  ext -->|"OTLP/HTTP\nbatched, TLS, bearer"| col
+  ext -->|"OTLP/HTTP<br/>batched, TLS, bearer"| col
 
   subgraph infra["Reference dashboard server (deployed by the organization)"]
     direction TB
-    col["OTel Collector\n(HA pair behind LB)"]
-    pg[("Postgres\npi_spend_logs\n24mo hot")]
-    mimir[("Mimir / Prometheus\n90d rolling")]
-    tempo[("Tempo\n14d traces")]
-    api["Pi Usage API\nSSO + REST + SSE"]
-    spa["Pi Usage Dashboard SPA"]
-    graf["Grafana\n(existing company instance)"]
+    col["OTel Collector<br/>(HA pair behind LB)"]
+    pg[("Postgres<br/>agent_spend_logs<br/>24mo hot")]
+    mimir[("Mimir / Prometheus<br/>90d rolling")]
+    tempo[("Tempo<br/>14d traces")]
+    api["Agent Spend API<br/>SSO + REST + SSE"]
+    spa["Agent Spend SPA"]
+    graf["Grafana<br/>(existing company instance)"]
     api --> spa
     col --> pg
     col --> mimir
@@ -144,8 +144,8 @@ flowchart LR
 | **Postgres** | wherever the deploying organization runs it | durable spend log; team / user / budget tables | Postgres 14+ (any flavor: managed, self-hosted, sqlite for solo) |
 | **Mimir / Prometheus** | the deploying organization's existing stack, if present | rolling 90-day metric store for Grafana / alerts | Mimir / Prometheus / Grafana Cloud / equivalent |
 | **Tempo** | the deploying organization's existing stack, if present | per-turn span store for "show me this session" | Tempo or any OTLP-compatible trace store |
-| **Pi Usage API** | the deploying organization's infrastructure | REST + SSE; SSO + RBAC; renders aggregations | Node + Express + `pg` |
-| **Pi Usage Dashboard SPA** | served by API | the human UI for per-user/team/finance | Svelte + Tailwind |
+| **Agent Spend API** | the deploying organization's infrastructure | REST + SSE; SSO + RBAC; renders aggregations | Node + Express + `pg` |
+| **Agent Spend SPA** | served by API | the human UI for per-user/team/finance | Svelte + Tailwind |
 | **Grafana** | the deploying organization's existing instance | ops + power-user view; pre-built JSON dashboards shipped with the reference server | Grafana OSS / Cloud / Enterprise |
 
 ### 2.2 Key data-flow rules
@@ -909,13 +909,13 @@ CREATE TABLE agent_spend_logs (
   tenant_id            TEXT         NOT NULL DEFAULT 'default'
 );
 
-CREATE INDEX pi_spend_logs_user_ts        ON agent_spend_logs (user_id, ts DESC);
-CREATE INDEX pi_spend_logs_team_ts        ON agent_spend_logs (team, ts DESC) WHERE team IS NOT NULL;
-CREATE INDEX pi_spend_logs_repo_ts        ON agent_spend_logs (workspace_repo, ts DESC) WHERE workspace_repo IS NOT NULL;
-CREATE INDEX pi_spend_logs_model_ts       ON agent_spend_logs (model, ts DESC);
-CREATE INDEX pi_spend_logs_provider_ts    ON agent_spend_logs (provider, ts DESC);
-CREATE INDEX pi_spend_logs_session        ON agent_spend_logs (session_id);
-CREATE INDEX pi_spend_logs_ts             ON agent_spend_logs (ts DESC);
+CREATE INDEX agent_spend_logs_user_ts        ON agent_spend_logs (user_id, ts DESC);
+CREATE INDEX agent_spend_logs_team_ts        ON agent_spend_logs (team, ts DESC) WHERE team IS NOT NULL;
+CREATE INDEX agent_spend_logs_repo_ts        ON agent_spend_logs (workspace_repo, ts DESC) WHERE workspace_repo IS NOT NULL;
+CREATE INDEX agent_spend_logs_model_ts       ON agent_spend_logs (model, ts DESC);
+CREATE INDEX agent_spend_logs_provider_ts    ON agent_spend_logs (provider, ts DESC);
+CREATE INDEX agent_spend_logs_session        ON agent_spend_logs (session_id);
+CREATE INDEX agent_spend_logs_ts             ON agent_spend_logs (ts DESC);
 ```
 
 Row size ≈ 220 bytes uncompressed. At 200 devs × 100 turns/day, **expect ~6 GB/year**. Trivial for Postgres.
@@ -1000,8 +1000,8 @@ sequenceDiagram
   autonumber
   participant Dev as Developer
   participant CLI as pi-usage CLI
-  participant API as Pi Usage API
-  participant IdP as Company IdP (Entra/Google)
+  participant API as Agent Spend API
+  participant IdP as OIDC provider (Entra / Google / Okta / Auth0 / Keycloak / ...)
 
   Dev->>CLI: pi-usage login
   CLI->>API: POST /auth/device/start

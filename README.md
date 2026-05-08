@@ -68,7 +68,7 @@ All diagrams in this repo use **Mermaid**, rendered inline in Markdown. See [`AG
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) (TODO). For agents (including AI agents) working in this repo, see [AGENTS.md](AGENTS.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). For agents (including AI agents) working in this repo, see [AGENTS.md](AGENTS.md).
 
 ## License
 
