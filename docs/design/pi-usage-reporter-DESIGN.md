@@ -55,7 +55,9 @@ These map onto explicit non-goals (§1.5) — we are deliberately *not* trying t
 
 ### 1.4 Constraints
 
-The solution lives inside our specific environment and must respect:
+> **Dependency direction.** This document specifies the extension. Sibling documents (`dashboard-backend-STRATEGY.md`, the future `vilosource/pi-usage-dashboard` repo) specify the reference dashboard server. Both define a **contract** that any deploying organization — Optiscan included — adapts their existing infrastructure to meet. Specific values (Prometheus URL, IdP issuer URL, certificate strategy, alerting routing) are resolved at deployment time and recorded in private deployment repos. They are not inputs to the design here.
+
+The solution must respect:
 
 - **C1 — Pi as the only client.** Every developer uses pi-mono; the extension target is the pi extension API. No need to support Claude Code / Cursor / Codex ourselves.
 - **C2 — pi-mom on the same stack.** Our Slack bot uses `pi-mom`, which shares the `pi-ai`/`pi-agent-core` core. The same extension must work there with no changes (only the identity becomes "the bot account").
