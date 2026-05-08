@@ -28,6 +28,10 @@ pi install git:github.com/vilosource/pi-extensions
 
 then filter to the packages you want in `~/.pi/agent/settings.json` per the [Pi packages docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/packages.md).
 
+## Companion repo
+
+The **dashboard** that consumes OTel events from this extension lives in a separate repository: [`vilosource/agent-spend-dashboard`](https://github.com/vilosource/agent-spend-dashboard). It is harness-agnostic — future Claude Code, Cursor, or Aider extensions emit the same `agent.*` attributes to the same dashboard. See [`docs/strategy/scope-and-deployment-STRATEGY.md`](docs/strategy/scope-and-deployment-STRATEGY.md) for the three-artifact split.
+
 ## Documentation
 
 ### Strategy
