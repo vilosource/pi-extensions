@@ -40,3 +40,19 @@ Rules for any agent — human or AI — working in this repository.
 - Never log prompt content, tool arguments, tool outputs, or file contents to anything that leaves the developer machine.
 - Identity is never hardcoded. Resolve from environment / git config / explicit override, never from anything that resembles a hardware fingerprint.
 - Configuration order is always: env var → config file → built-in default. Document every knob.
+
+## Diagrams
+
+All diagrams in this repository's documentation use **Mermaid**, rendered inline in Markdown. Do not use ASCII art, text boxes, or external image files for architecture or flow diagrams.
+
+Conventions:
+
+- **Architecture and data flow** → `flowchart LR` (left-to-right). Use `subgraph` to group by trust boundary or deployment location.
+- **Protocols and lifecycles** → `sequenceDiagram` with `autonumber`.
+- **Database schema** → `erDiagram`.
+- **State machines** → `stateDiagram-v2`.
+- **Roadmaps** → `gantt`.
+- **Class / type relationships** → `classDiagram`, sparingly.
+- **No theme directives** in diagram source. Let GitHub render with its default theme.
+- **Above each diagram, write one sentence describing what it shows** so readers in plain-text viewers still understand the intent.
+- **Keep each diagram under ~40 nodes.** Split into "context" and "detail" diagrams when larger.
