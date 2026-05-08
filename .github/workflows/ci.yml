@@ -23,12 +23,9 @@ jobs:
          - uses: actions/setup-node@v4
            with:
               node-version: "20.18"
-         - name: Print versions
-           run: |
-              node --version
-              npm --version
-         - name: Install dependencies (verbose, no cache)
-           run: npm install --no-audit --no-fund --loglevel=verbose 2>&1 | tail -100
+              cache: npm
+         - name: Install dependencies
+           run: npm install --no-audit --no-fund
          - name: Biome lint + format check
            run: npm run lint:ci
          - name: TypeScript build
@@ -37,12 +34,6 @@ jobs:
            run: npm run depgraph
          - name: Vitest
            run: npm run test
-         - name: Upload npm logs on failure
-           if: failure()
-           uses: actions/upload-artifact@v4
-           with:
-              name: npm-logs
-              path: ~/.npm/_logs/
 
    test-coverage:
       name: Source changes ship with tests
