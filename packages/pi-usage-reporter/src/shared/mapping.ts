@@ -3,9 +3,14 @@
  * attribute dictionary, following the schema in
  * docs/design/pi-usage-reporter-DESIGN.md §3.9.
  *
+ * Adds `agent.cost.estimation` per spike-defect D2: distinguishes
+ * subscription-billed providers (which return zero cost) from metered
+ * ones, so the dashboard can render them differently.
+ *
  * Pure function. No IO. Easy to test.
  */
 
+import { classifyCost } from "./cost-classification.js";
 import type { Identity, TurnEvent, Workspace } from "./types.js";
 
 export interface MappingContext {
@@ -50,6 +55,7 @@ export function turnAttributes(
 		"agent.cost.cache_read.usd": event.usage.cost.cacheRead,
 		"agent.cost.cache_write.usd": event.usage.cost.cacheWrite,
 		"agent.cost.total.usd": event.usage.cost.total,
+		"agent.cost.estimation": classifyCost(event.usage),
 		"agent.stop_reason": event.stopReason,
 		"agent.event.kind": event.kind,
 		"agent.harness.name": ctx.harnessName,

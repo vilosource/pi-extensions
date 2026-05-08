@@ -535,6 +535,7 @@ Coding-agent attributes (the harness-agnostic `agent.*` namespace; this extensio
 | `agent.cost.cache_read.usd` | double | `Usage.cost.cacheRead` |
 | `agent.cost.cache_write.usd` | double | `Usage.cost.cacheWrite` |
 | `agent.cost.total.usd` | double | `Usage.cost.total` |
+| `agent.cost.estimation` | string enum | `"metered"` / `"subscription"` / `"unreported"` per the cost classifier (see [D12](../strategy/decisions-LOG.md)). Lets dashboards distinguish providers that return zero cost because they're subscription-billed (e.g. GitHub Copilot) from providers that genuinely cost zero. |
 | `agent.stop_reason` | string | `AssistantMessage.stopReason` |
 | `agent.event.kind` | string | `"turn"` / `"compaction"` / `"session"` |
 | `agent.parent.session_id` | string | reserved for future sub-agent attribution |

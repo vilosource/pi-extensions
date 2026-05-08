@@ -72,6 +72,40 @@ describe("turnAttributes", () => {
 		expect(attrs["agent.event.kind"]).toBe("turn");
 		expect(attrs["agent.harness.name"]).toBe("pi");
 		expect(attrs["agent.harness.version"]).toBe("0.74.0");
+		expect(attrs["agent.cost.estimation"]).toBe("metered");
+	});
+
+	it("emits agent.cost.estimation=subscription when tokens > 0 but cost is zero", () => {
+		const subscriptionTurn: TurnEvent = {
+			...turn,
+			usage: {
+				input: 100,
+				output: 50,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 150,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+		};
+		const attrs = turnAttributes(subscriptionTurn, ctx);
+		expect(attrs["agent.cost.estimation"]).toBe("subscription");
+		expect(attrs["agent.cost.total.usd"]).toBe(0);
+	});
+
+	it("emits agent.cost.estimation=unreported when both tokens and cost are zero", () => {
+		const emptyTurn: TurnEvent = {
+			...turn,
+			usage: {
+				input: 0,
+				output: 0,
+				cacheRead: 0,
+				cacheWrite: 0,
+				totalTokens: 0,
+				cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+			},
+		};
+		const attrs = turnAttributes(emptyTurn, ctx);
+		expect(attrs["agent.cost.estimation"]).toBe("unreported");
 	});
 
 	it("omits agent.workspace.repo when undefined (avoids null in OTel)", () => {
