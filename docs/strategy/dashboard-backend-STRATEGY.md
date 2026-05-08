@@ -204,7 +204,7 @@ What's already shipped:
 - **0.1 spike**: extension loads in pi, emits 27 attributes to Jaeger end-to-end. (`vilosource/pi-extensions` commit `0fb4623`)
 - **0.1 follow-up**: D1 (session id), D2 (subscription cost classification), D3 (harness version) all fixed.
 - **0.2 lab foundation**: Compose stack, agent_spend_logs schema, OTel Collector, Python bridge, synthetic seeder. (`vilosource/agent-spend-dashboard` commit `7d936a5`)
-- **0.2 Grafana**: three pre-built dashboards (Org Overview, By Team, Burn Rate) provisioned and visible at `http://localhost:3000`. (`88786de`)
+- **0.2 Grafana**: three pre-built dashboards (Org Overview, By Team, Burn Rate) provisioned and visible at `http://localhost:7000`. (`88786de`)
 
 What's active:
 
