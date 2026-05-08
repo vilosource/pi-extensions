@@ -18,7 +18,7 @@ A pi extension that hooks `message_end` and `session_shutdown`, builds an OTel G
 
 | Env var | Purpose |
 |---|---|
-| `PI_USAGE_ENDPOINT` | OTLP/HTTP endpoint URL (e.g. `http://localhost:4318`). If unset, the extension warns once and disables itself. |
+| `PI_USAGE_ENDPOINT` | OTLP/HTTP endpoint URL (e.g. `http://localhost:7018` for the local lab; the API absorbs OTLP at `http://localhost:7080/v1/traces` after phase 0.3.7). If unset, the extension warns once and disables itself. |
 | `PI_USAGE_TOKEN` | Bearer token sent as `Authorization: Bearer ...`. |
 | `PI_USAGE_USER_ID` | Override identity. Default: `git config --global user.email`, then `${USER}@${hostname}`. |
 | `PI_USAGE_ENVIRONMENT` | Environment tag in OTel `deployment.environment` resource attribute. Default: `prod`. |
@@ -53,7 +53,7 @@ docker run -d --rm --name jaeger -p 16686:16686 -p 4318:4318 jaegertracing/all-i
 cd packages/pi-usage-reporter && npm run build
 
 # 3. Run pi with the extension loaded and PI_USAGE_ENDPOINT pointing at Jaeger
-PI_USAGE_ENDPOINT=http://localhost:4318 \
+PI_USAGE_ENDPOINT=http://localhost:7018 \
 PI_USAGE_TOKEN=spike-token \
 PI_USAGE_VERBOSE=1 \
 pi

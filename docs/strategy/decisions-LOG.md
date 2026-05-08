@@ -238,7 +238,7 @@ The classifier is a pure function with 5 unit tests. Verified end-to-end against
 
 **Decision:** The recommended install path is **clicking "Install" in the SPA** (visible after SSO login) and pasting the resulting one-liner into a terminal. The script writes `~/.config/pi-usage/config.json`, runs `npm install -g @vilosource/pi-usage-reporter`, and patches `~/.pi/agent/settings.json` to load the extension. `pi-usage login` is the alternative for terminal-only environments via OAuth 2.0 Device Authorization Grant (RFC 8628).
 
-For lab work without SSO: `pi-usage login --lab --endpoint http://localhost:8080`. For CI: `PI_USAGE_TOKEN=$AGENT_SPEND_CI_TOKEN`.
+For lab work without SSO: `pi-usage login --lab --endpoint http://localhost:7080`. For CI: `PI_USAGE_TOKEN=$AGENT_SPEND_CI_TOKEN`.
 
 All three paths produce the same `~/.config/pi-usage/config.json`.
 
