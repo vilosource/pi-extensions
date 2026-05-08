@@ -383,7 +383,7 @@ export default function (pi: ExtensionAPI): void {
   const buffer = new EventBuffer(cfg.walPath);
 
   pi.on("session_start", (e) => {
-    buffer.openSession({ sessionId: pi.session.id, cwd: process.cwd(), ...ident, startedAt: Date.now() });
+    buffer.openSession({ sessionId: agent.session.id, cwd: process.cwd(), ...ident, startedAt: Date.now() });
   });
 
   pi.on("message_end", (e) => {
@@ -391,7 +391,7 @@ export default function (pi: ExtensionAPI): void {
     const m = e.message;
     if (!m.usage) return;
     otel.recordTurn({
-      sessionId: pi.session.id,
+      sessionId: agent.session.id,
       provider: m.provider,
       model: m.model,
       api: m.api,
@@ -408,7 +408,7 @@ export default function (pi: ExtensionAPI): void {
 
   pi.on("session_compact", (e) => {
     // separate event — compactions can be expensive, worth tracking
-    otel.recordCompaction({ sessionId: pi.session.id, beforeTokens: e.before, afterTokens: e.after, ...ident });
+    otel.recordCompaction({ sessionId: agent.session.id, beforeTokens: e.before, afterTokens: e.after, ...ident });
   });
 
   pi.on("session_shutdown", async () => {
@@ -423,7 +423,7 @@ Two parallel streams to the same collector endpoint:
 
 1. **Metrics** (aggregated, low-bandwidth). Exporter: OTLP/HTTP, interval 10-30 s.
    - `gen_ai.client.token.usage` histogram (with attributes per §3.3)
-   - `pi.cost.usd` histogram (our extension — see §4.4)
+   - `agent.cost.usd` histogram (our extension — see §4.4)
 2. **Spans** (per-turn detail). Exporter: OTLP/HTTP, batched.
    - One span per assistant turn (§3.4)
    - One span per session (lifetime), with the turn spans nested by `gen_ai.conversation.id`
@@ -436,26 +436,26 @@ The OTel GenAI spec is intentionally cost-agnostic (cost belongs to the operator
 
 | Attribute | Type | Why |
 |---|---|---|
-| `pi.user.id` | string | who incurred the spend (email or LDAP id) |
+| `agent.user.id` | string | who incurred the spend (email or LDAP id) |
 | `pi.user.team` | string | for team-level budgeting |
-| `pi.machine.id` | string | host fingerprint for multi-machine attribution |
-| `pi.session.id` | string | pi session UUID — joins to local JSONL on disk |
-| `pi.workspace.cwd` | string | the working directory pi was launched from (= "project" for us) |
-| `pi.workspace.repo` | string | git remote URL if available |
-| `pi.workspace.branch` | string | git branch if available |
-| `pi.cost.input.usd` | double | per-turn input cost |
-| `pi.cost.output.usd` | double | per-turn output cost |
-| `pi.cost.cache_read.usd` | double | per-turn cache-read cost |
-| `pi.cost.cache_write.usd` | double | per-turn cache-write cost |
-| `pi.cost.total.usd` | double | per-turn total — what gets summed for the dashboard |
-| `pi.stop_reason` | string | `stop` / `length` / `toolUse` / `error` / `aborted` |
-| `pi.api` | string | the api dialect used (`anthropic-messages`, `openai-completions`, ...) |
+| `agent.machine.id` | string | host fingerprint for multi-machine attribution |
+| `agent.session.id` | string | pi session UUID — joins to local JSONL on disk |
+| `agent.workspace.cwd` | string | the working directory pi was launched from (= "project" for us) |
+| `agent.workspace.repo` | string | git remote URL if available |
+| `agent.workspace.branch` | string | git branch if available |
+| `agent.cost.input.usd` | double | per-turn input cost |
+| `agent.cost.output.usd` | double | per-turn output cost |
+| `agent.cost.cache_read.usd` | double | per-turn cache-read cost |
+| `agent.cost.cache_write.usd` | double | per-turn cache-write cost |
+| `agent.cost.total.usd` | double | per-turn total — what gets summed for the dashboard |
+| `agent.stop_reason` | string | `stop` / `length` / `toolUse` / `error` / `aborted` |
+| `agent.api.dialect` | string | the api dialect used (`anthropic-messages`, `openai-completions`, ...) |
 
 (All `pi.*` are extension-level; they do not collide with any planned `gen_ai.*` field.)
 
 ### 4.5 Identity resolution — who is this developer?
 
-Order of precedence for `pi.user.id`:
+Order of precedence for `agent.user.id`:
 
 1. `PI_USAGE_USER_ID` env var (explicit override; for CI/shared accounts).
 2. `git config user.email` (most developers have this set).
@@ -463,7 +463,7 @@ Order of precedence for `pi.user.id`:
 
 `pi.user.team` is mapped via a small static lookup: `~/.config/pi-usage/team-map.json` (operator-managed) or, better, returned by the dashboard server based on the user id at the first sync. Avoids hard-coding org structure into developer machines.
 
-`pi.machine.id` is a stable per-machine UUID stored at `~/.config/pi-usage/machine-id` (created once on first run). Allows identifying laptops separately from CI runners under the same user id.
+`agent.machine.id` is a stable per-machine UUID stored at `~/.config/pi-usage/machine-id` (created once on first run). Allows identifying laptops separately from CI runners under the same user id.
 
 ### 4.6 Offline robustness — the WAL
 
@@ -512,7 +512,7 @@ Developers (pi extension)
 **Storage rows** (Postgres, schema lifted from LiteLLM `LiteLLM_SpendLogs`):
 
 ```sql
-CREATE TABLE pi_spend_logs (
+CREATE TABLE agent_spend_logs (
   id              BIGSERIAL PRIMARY KEY,
   ts              TIMESTAMPTZ NOT NULL,
   user_id         TEXT NOT NULL,
@@ -538,10 +538,10 @@ CREATE TABLE pi_spend_logs (
   duration_ms     INT,
   request_tags    TEXT[]
 );
-CREATE INDEX ON pi_spend_logs (user_id, ts DESC);
-CREATE INDEX ON pi_spend_logs (team, ts DESC);
-CREATE INDEX ON pi_spend_logs (model, ts DESC);
-CREATE INDEX ON pi_spend_logs (workspace_repo, ts DESC);
+CREATE INDEX ON agent_spend_logs (user_id, ts DESC);
+CREATE INDEX ON agent_spend_logs (team, ts DESC);
+CREATE INDEX ON agent_spend_logs (model, ts DESC);
+CREATE INDEX ON agent_spend_logs (workspace_repo, ts DESC);
 ```
 
 **Dashboard pages (MVP):**
@@ -622,8 +622,8 @@ Mirroring Anthropic's stance from §2.4:
 4. **What about pi-mom?** mom (the Slack bot harness) uses the same `pi-ai`/`pi-agent-core` stack. Same extension *should* work in mom because the hook contract is identical — should be tested as part of v1.
 5. **Multi-tenant identity for the dashboard.** SSO is mandatory; pick one IdP integration first (Google or Entra) and ship.
 6. **Per-provider quirks.** Bedrock cost reporting can include "service tier" metadata; OpenRouter routes through other providers and re-attributes. Need to validate that our pi-mono `Usage` field actually reflects upstream-billed cost in those cases. (The pi-mono knowledge area in mykb already lists a related fix: "capture usage from `choice.usage` for non-standard OpenAI-compatible providers", commit `45354153`.)
-7. **Compaction events.** A `session_compact` doubles input cost briefly. Should this be reported as a regular turn or as its own line item? Recommend separate event with `pi.event.kind=compaction`.
-8. **Sub-agent attribution.** When (if) sub-agents land in pi, do we want to attribute their usage to the parent session or surface it separately? Plan for a `pi.parent.session_id` attribute now.
+7. **Compaction events.** A `session_compact` doubles input cost briefly. Should this be reported as a regular turn or as its own line item? Recommend separate event with `agent.event.kind=compaction`.
+8. **Sub-agent attribution.** When (if) sub-agents land in pi, do we want to attribute their usage to the parent session or surface it separately? Plan for a `agent.parent.session_id` attribute now.
 9. **Cost-vs-billed-cost reconciliation.** Provider invoices arrive monthly and rarely match local estimates exactly (rounding, plan discounts, free-tier credits). Provide an admin reconciliation view that shows local-estimated vs invoiced delta per provider.
 
 ## 8. Phased delivery

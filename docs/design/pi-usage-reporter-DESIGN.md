@@ -11,7 +11,7 @@
 - Strategy: [`docs/strategy/dashboard-backend-STRATEGY.md`](../strategy/dashboard-backend-STRATEGY.md) — reference server backend architecture
 - Research: [`docs/research/usage-tracking-dashboard-RESEARCH.md`](../research/usage-tracking-dashboard-RESEARCH.md)
 
-> **Scope clarification.** Per the [scope and deployment strategy](../strategy/scope-and-deployment-STRATEGY.md), this document specifies **only the extension** (`@vilosource/pi-usage-reporter`). The extension is organization-agnostic. It speaks OTLP and reads config files. The OTel Collector, Postgres, Grafana, and SPA discussed in later sections describe the **reference dashboard server** that organizations may optionally deploy — they specify the *external contract* the extension expects on the other end of the wire, not its internal implementation. The reference server lives in a separate (future) repo at `vilosource/pi-usage-dashboard`. Optiscan's specific deployment of that reference server (Docker Swarm, Azure Managed Postgres, our company Grafana) is captured in a private Optiscan repo and is out of scope here.
+> **Scope clarification.** Per the [scope and deployment strategy](../strategy/scope-and-deployment-STRATEGY.md), this document specifies **only the extension** (`@vilosource/pi-usage-reporter`). The extension is organization-agnostic. It speaks OTLP and reads config files. The OTel Collector, Postgres, Grafana, and SPA discussed in later sections describe the **reference dashboard server** that organizations may optionally deploy — they specify the *external contract* the extension expects on the other end of the wire, not its internal implementation. The reference server lives in a separate (future) repo at `vilosource/agent-spend-dashboard`. Optiscan's specific deployment of that reference server (Docker Swarm, Azure Managed Postgres, our company Grafana) is captured in a private Optiscan repo and is out of scope here.
 
 ---
 
@@ -55,7 +55,7 @@ These map onto explicit non-goals (§1.5) — we are deliberately *not* trying t
 
 ### 1.4 Constraints
 
-> **Dependency direction.** This document specifies the extension. Sibling documents (`dashboard-backend-STRATEGY.md`, the future `vilosource/pi-usage-dashboard` repo) specify the reference dashboard server. Both define a **contract** that any deploying organization — Optiscan included — adapts their existing infrastructure to meet. Specific values (Prometheus URL, IdP issuer URL, certificate strategy, alerting routing) are resolved at deployment time and recorded in private deployment repos. They are not inputs to the design here.
+> **Dependency direction.** This document specifies the extension. Sibling documents (`dashboard-backend-STRATEGY.md`, the future `vilosource/agent-spend-dashboard` repo) specify the reference dashboard server. Both define a **contract** that any deploying organization — Optiscan included — adapts their existing infrastructure to meet. Specific values (Prometheus URL, IdP issuer URL, certificate strategy, alerting routing) are resolved at deployment time and recorded in private deployment repos. They are not inputs to the design here.
 
 The solution must respect:
 
@@ -363,7 +363,7 @@ export function wireHooks(pi, otel, buffer, ident, cfg) {
 
   pi.on("session_start", () => {
     const meta = {
-      sessionId: pi.session.id,
+      sessionId: agent.session.id,
       startedAt: Date.now(),
       cwd:       process.cwd(),
       ...resolveWorkspace(),
@@ -379,7 +379,7 @@ export function wireHooks(pi, otel, buffer, ident, cfg) {
     if (!m.usage) return;
     const event = {
       kind: "turn",
-      sessionId: pi.session.id,
+      sessionId: agent.session.id,
       provider:  m.provider, api: m.api, model: m.model,
       usage: m.usage, stopReason: m.stopReason, timestamp: m.timestamp,
       ...ident,
@@ -391,7 +391,7 @@ export function wireHooks(pi, otel, buffer, ident, cfg) {
   pi.on("session_compact", (e) => {
     const event = {
       kind: "compaction",
-      sessionId: pi.session.id,
+      sessionId: agent.session.id,
       beforeTokens: e.before?.totalTokens,
       afterTokens:  e.after?.totalTokens,
       timestamp: Date.now(),
@@ -402,7 +402,7 @@ export function wireHooks(pi, otel, buffer, ident, cfg) {
   });
 
   pi.on("session_shutdown", async () => {
-    otel.endSessionSpan(pi.session.id);
+    otel.endSessionSpan(agent.session.id);
     await otel.flush();                // 5 s timeout
     await buffer.checkpoint();         // mark drained as ackable
   });
@@ -435,7 +435,7 @@ flowchart TB
 
 `pi.user.team` is **not** resolved on the developer machine. The Collector or API side maps `user.id → team` from a server-managed table (see §6.4). This avoids leaking org structure to dotfiles and avoids stale team mappings on every laptop.
 
-`pi.machine.id` is intentionally a random UUID — **not** based on any hardware identifier. We do not want the appearance of fingerprinting, and we want machines to be re-pairable with new physical hosts (`rm machine-id` and let it regenerate).
+`agent.machine.id` is intentionally a random UUID — **not** based on any hardware identifier. We do not want the appearance of fingerprinting, and we want machines to be re-pairable with new physical hosts (`rm machine-id` and let it regenerate).
 
 ### 3.7 Workspace resolution
 
@@ -443,10 +443,10 @@ Per session we resolve four attributes, then cache them for the rest of the sess
 
 | Attribute | How |
 |---|---|
-| `pi.workspace.cwd` | `process.cwd()` |
-| `pi.workspace.repo` | `git -C $cwd config --get remote.origin.url`, normalised to `host/owner/name` |
-| `pi.workspace.branch` | `git -C $cwd rev-parse --abbrev-ref HEAD` |
-| `pi.workspace.is_ci` | inferred from `CI` / `GITHUB_ACTIONS` / `GITLAB_CI` env vars |
+| `agent.workspace.cwd` | `process.cwd()` |
+| `agent.workspace.repo` | `git -C $cwd config --get remote.origin.url`, normalised to `host/owner/name` |
+| `agent.workspace.branch` | `git -C $cwd rev-parse --abbrev-ref HEAD` |
+| `agent.workspace.is_ci` | inferred from `CI` / `GITHUB_ACTIONS` / `GITLAB_CI` env vars |
 
 If `PI_USAGE_REDACT_PATHS=1`, `cwd` is hashed (BLAKE3 truncated to 16 hex chars) and `repo`/`branch` are dropped. Server side keeps a per-user reverse map only if the user opts in via the dashboard; otherwise the hash is opaque even to admins.
 
@@ -465,8 +465,8 @@ export function initOtel(cfg, ident) {
     "service.name":           "pi-usage-reporter",
     "service.version":        VERSION,
     "deployment.environment": cfg.environment,
-    "pi.user.id":             ident.userId,
-    "pi.machine.id":          ident.machineId,
+    "agent.user.id":             ident.userId,
+    "agent.machine.id":          ident.machineId,
   });
 
   const exporters = cfg.endpoints.map((endpoint, i) => ({
@@ -484,7 +484,7 @@ export function initOtel(cfg, ident) {
   const meter  = metrics.getMeter("pi-usage-reporter");
 
   const tokensHist = meter.createHistogram("gen_ai.client.token.usage", { unit: "{token}" });
-  const costHist   = meter.createHistogram("pi.cost.usd",                 { unit: "USD"   });
+  const costHist   = meter.createHistogram("agent.cost.usd",                 { unit: "USD"   });
 
   function recordTurn(e) {
     const attrs = turnAttributes(e);
@@ -518,27 +518,29 @@ Standard OTel GenAI attributes (see [OTel GenAI spec](https://opentelemetry.io/d
 | `gen_ai.conversation.id` | string | pi session UUID |
 | `gen_ai.token.type` | string, on metric only | `"input"` / `"output"` / `"cache_read"` / `"cache_creation"` |
 
-Pi-extension attributes (our namespace):
+Coding-agent attributes (the harness-agnostic `agent.*` namespace; this extension fills them in for pi, future extensions for other harnesses fill the same names):
 
 | Attribute | Type | Source |
 |---|---|---|
-| `pi.user.id` | string | identity (§3.6) |
-| `pi.machine.id` | string | identity |
-| `pi.session.id` | string | pi session UUID |
-| `pi.workspace.cwd` | string | workspace (§3.7) |
-| `pi.workspace.repo` | string | workspace |
-| `pi.workspace.branch` | string | workspace |
-| `pi.workspace.is_ci` | boolean | workspace |
-| `pi.api` | string | `AssistantMessage.api` |
-| `pi.cost.input.usd` | double | `Usage.cost.input` |
-| `pi.cost.output.usd` | double | `Usage.cost.output` |
-| `pi.cost.cache_read.usd` | double | `Usage.cost.cacheRead` |
-| `pi.cost.cache_write.usd` | double | `Usage.cost.cacheWrite` |
-| `pi.cost.total.usd` | double | `Usage.cost.total` |
-| `pi.stop_reason` | string | `AssistantMessage.stopReason` |
-| `pi.event.kind` | string | `"turn"` / `"compaction"` / `"session"` |
-| `pi.parent.session_id` | string | reserved for future sub-agent attribution |
-| `pi.tenant_id` | string | reserved for multi-tenant future |
+| `agent.user.id` | string | identity (§3.6) |
+| `agent.machine.id` | string | identity |
+| `agent.session.id` | string | pi session UUID |
+| `agent.workspace.cwd` | string | workspace (§3.7) |
+| `agent.workspace.repo` | string | workspace |
+| `agent.workspace.branch` | string | workspace |
+| `agent.workspace.is_ci` | boolean | workspace |
+| `agent.api.dialect` | string | `AssistantMessage.api` |
+| `agent.cost.input.usd` | double | `Usage.cost.input` |
+| `agent.cost.output.usd` | double | `Usage.cost.output` |
+| `agent.cost.cache_read.usd` | double | `Usage.cost.cacheRead` |
+| `agent.cost.cache_write.usd` | double | `Usage.cost.cacheWrite` |
+| `agent.cost.total.usd` | double | `Usage.cost.total` |
+| `agent.stop_reason` | string | `AssistantMessage.stopReason` |
+| `agent.event.kind` | string | `"turn"` / `"compaction"` / `"session"` |
+| `agent.parent.session_id` | string | reserved for future sub-agent attribution |
+| `agent.harness.name` | string | always `"pi"` for this extension; future Claude Code / Cursor / Aider extensions emit their own value (e.g. `"claude-code"`). Lets the dashboard distinguish spend by harness without schema changes. |
+| `agent.harness.version` | string | the running pi-mono version (e.g. `"0.74.0"`). Useful for correlating spend changes with harness upgrades. |
+| `agent.tenant_id` | string | reserved for multi-tenant future |
 
 ### 3.10 Provider name mapping
 
@@ -672,11 +674,11 @@ The Collector has one OTLP receiver and three exporters. Each is enabled or disa
 ```mermaid
 flowchart TB
   recv["OTLP/HTTP receiver<br/>:4318, TLS, bearer auth"]
-  recv --> proc_filter["filter/sanity<br/>drop spans missing pi.user.id"]
+  recv --> proc_filter["filter/sanity<br/>drop spans missing agent.user.id"]
   proc_filter --> proc_redact["attributes/redact<br/>strip any prompt/completion/tool args"]
-  proc_redact --> proc_team["transform/team_lookup<br/>map pi.user.id → pi.user.team"]
+  proc_redact --> proc_team["transform/team_lookup<br/>map agent.user.id → pi.user.team"]
   proc_team --> proc_batch["batch<br/>5 s, 512 spans"]
-  proc_batch --> exp_pg["Postgres exporter<br/>→ pi_spend_logs"]
+  proc_batch --> exp_pg["Postgres exporter<br/>→ agent_spend_logs"]
   proc_batch --> exp_prom["prometheusremotewrite<br/>→ company Mimir"]
   proc_batch --> exp_tempo["OTLP exporter<br/>→ company Tempo"]
 ```
@@ -704,7 +706,7 @@ processors:
     error_mode: ignore
     spans:
       span:
-        - 'attributes["pi.user.id"] == nil'
+        - 'attributes["agent.user.id"] == nil'
 
   attributes/redact:
     actions:
@@ -721,9 +723,9 @@ processors:
 
 exporters:
   postgres:
-    dsn: "postgres://otel:...@pg-spend:5432/pi_usage?sslmode=require"
+    dsn: "postgres://otel:...@pg-spend:5432/agent_spend?sslmode=require"
     insert: |
-      INSERT INTO pi_spend_logs (
+      INSERT INTO agent_spend_logs (
         ts, user_id, team, machine_id, session_id,
         workspace_cwd, workspace_repo, workspace_branch, workspace_is_ci,
         provider, api, model,
@@ -731,13 +733,13 @@ exporters:
         cost_input_usd, cost_output_usd, cost_cache_read_usd, cost_cache_write_usd, cost_total_usd,
         stop_reason, event_kind, environment
       ) VALUES (
-        $start_time_unix_nano, $pi.user.id, $pi.user.team, $pi.machine.id, $pi.session.id,
-        $pi.workspace.cwd, $pi.workspace.repo, $pi.workspace.branch, $pi.workspace.is_ci,
+        $start_time_unix_nano, $agent.user.id, $pi.user.team, $agent.machine.id, $agent.session.id,
+        $agent.workspace.cwd, $agent.workspace.repo, $agent.workspace.branch, $agent.workspace.is_ci,
         $gen_ai.provider.name, $pi.api, $gen_ai.request.model,
         $gen_ai.usage.input_tokens, $gen_ai.usage.output_tokens,
           $gen_ai.usage.cache_read.input_tokens, $gen_ai.usage.cache_creation.input_tokens,
-        $pi.cost.input.usd, $pi.cost.output.usd, $pi.cost.cache_read.usd, $pi.cost.cache_write.usd, $pi.cost.total.usd,
-        $pi.stop_reason, $pi.event.kind, $deployment.environment
+        $agent.cost.input.usd, $agent.cost.output.usd, $agent.cost.cache_read.usd, $agent.cost.cache_write.usd, $agent.cost.total.usd,
+        $agent.stop_reason, $agent.event.kind, $deployment.environment
       )
 
   prometheusremotewrite:
@@ -800,9 +802,9 @@ erDiagram
   users ||--o{ api_tokens : has
   users }o--|| teams : belongs_to
   teams ||--o{ teams : parent
-  users ||--o{ pi_spend_logs : authored
-  teams ||--o{ pi_spend_logs : "rolled up to"
-  pi_spend_logs ||--o{ alert_log : "may trigger"
+  users ||--o{ agent_spend_logs : authored
+  teams ||--o{ agent_spend_logs : "rolled up to"
+  agent_spend_logs ||--o{ alert_log : "may trigger"
   budgets ||--o{ alert_log : evaluated_against
 
   users {
@@ -837,7 +839,7 @@ erDiagram
     timestamptz expires_at
     timestamptz revoked_at
   }
-  pi_spend_logs {
+  agent_spend_logs {
     bigserial id PK
     timestamptz ts
     text user_id FK
@@ -877,7 +879,7 @@ erDiagram
 ### 5.2 The spend log (DDL)
 
 ```sql
-CREATE TABLE pi_spend_logs (
+CREATE TABLE agent_spend_logs (
   id                   BIGSERIAL    PRIMARY KEY,
   ts                   TIMESTAMPTZ  NOT NULL,
   ingest_ts            TIMESTAMPTZ  NOT NULL DEFAULT now(),
@@ -907,20 +909,20 @@ CREATE TABLE pi_spend_logs (
   tenant_id            TEXT         NOT NULL DEFAULT 'default'
 );
 
-CREATE INDEX pi_spend_logs_user_ts        ON pi_spend_logs (user_id, ts DESC);
-CREATE INDEX pi_spend_logs_team_ts        ON pi_spend_logs (team, ts DESC) WHERE team IS NOT NULL;
-CREATE INDEX pi_spend_logs_repo_ts        ON pi_spend_logs (workspace_repo, ts DESC) WHERE workspace_repo IS NOT NULL;
-CREATE INDEX pi_spend_logs_model_ts       ON pi_spend_logs (model, ts DESC);
-CREATE INDEX pi_spend_logs_provider_ts    ON pi_spend_logs (provider, ts DESC);
-CREATE INDEX pi_spend_logs_session        ON pi_spend_logs (session_id);
-CREATE INDEX pi_spend_logs_ts             ON pi_spend_logs (ts DESC);
+CREATE INDEX pi_spend_logs_user_ts        ON agent_spend_logs (user_id, ts DESC);
+CREATE INDEX pi_spend_logs_team_ts        ON agent_spend_logs (team, ts DESC) WHERE team IS NOT NULL;
+CREATE INDEX pi_spend_logs_repo_ts        ON agent_spend_logs (workspace_repo, ts DESC) WHERE workspace_repo IS NOT NULL;
+CREATE INDEX pi_spend_logs_model_ts       ON agent_spend_logs (model, ts DESC);
+CREATE INDEX pi_spend_logs_provider_ts    ON agent_spend_logs (provider, ts DESC);
+CREATE INDEX pi_spend_logs_session        ON agent_spend_logs (session_id);
+CREATE INDEX pi_spend_logs_ts             ON agent_spend_logs (ts DESC);
 ```
 
 Row size ≈ 220 bytes uncompressed. At 200 devs × 100 turns/day, **expect ~6 GB/year**. Trivial for Postgres.
 
 ### 5.3 Retention and partitioning
 
-- `pi_spend_logs` partitioned monthly via `pg_partman`. Retention: **24 months hot** in Postgres, then archive partitions to S3 as Parquet via `pg_dump` / `COPY`. After 7 years, delete entirely (matches our general business-records retention).
+- `agent_spend_logs` partitioned monthly via `pg_partman`. Retention: **24 months hot** in Postgres, then archive partitions to S3 as Parquet via `pg_dump` / `COPY`. After 7 years, delete entirely (matches our general business-records retention).
 - `alert_log` retained 12 months.
 - `users`, `teams`, `machine_registry`, `api_tokens`, `budgets` retained indefinitely; deleted only on explicit operator action.
 
@@ -939,7 +941,7 @@ SELECT
   SUM(cache_write)   AS cache_write,
   SUM(cost_total_usd) AS cost_usd,
   COUNT(*) AS turns
-FROM pi_spend_logs
+FROM agent_spend_logs
 WHERE ts >= now() - INTERVAL '14 days'
 GROUP BY 1,2,3,4,5,6;
 
@@ -959,7 +961,7 @@ The API and SPA are scoped to per-user, per-team, per-project, finance, and audi
 
 | Page | Audience | Source |
 |---|---|---|
-| **My usage** | every developer | own rows from `pi_spend_logs` filtered by `user_id` |
+| **My usage** | every developer | own rows from `agent_spend_logs` filtered by `user_id` |
 | **Team usage** | team_lead+ | team's rows, with developer drill-down |
 | **Org usage** | admin | full table, per-team / per-provider rollups |
 | **Project drill-in** | team_lead+ | rows filtered by `workspace_repo` |
@@ -1021,7 +1023,7 @@ Tokens are 90-day JWTs scoped to a user. Revocable from the API admin page. Stor
 
 ```mermaid
 flowchart LR
-  ext["extension<br/>(emits pi.user.id only)"]
+  ext["extension<br/>(emits agent.user.id only)"]
   col["Collector<br/>transform/team_lookup"]
   cm["ConfigMap<br/>user → team map"]
   api["API<br/>writes ConfigMap nightly<br/>from users table"]
@@ -1062,13 +1064,13 @@ The extension does not read these fields. They are not in `Usage`. There is no o
 
 | Category | Fields | Why |
 |---|---|---|
-| Identity | `pi.user.id`, `pi.machine.id` | per-user attribution |
-| Workspace | `pi.workspace.cwd`, `pi.workspace.repo`, `pi.workspace.branch`, `pi.workspace.is_ci` | per-project attribution; redactable via `PI_USAGE_REDACT_PATHS=1` |
-| Model meta | `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`, `pi.api` | model-mix analysis |
+| Identity | `agent.user.id`, `agent.machine.id` | per-user attribution |
+| Workspace | `agent.workspace.cwd`, `agent.workspace.repo`, `agent.workspace.branch`, `agent.workspace.is_ci` | per-project attribution; redactable via `PI_USAGE_REDACT_PATHS=1` |
+| Model meta | `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.response.model`, `agent.api.dialect` | model-mix analysis |
 | Usage | `gen_ai.usage.*_tokens` | spend analysis |
 | Cost | `pi.cost.*.usd` | the whole point |
-| Operational | `gen_ai.response.finish_reasons`, `pi.stop_reason`, timestamps | debugging stuck/failed sessions |
-| Session | `gen_ai.conversation.id`, `pi.session.id` | join key for per-session detail |
+| Operational | `gen_ai.response.finish_reasons`, `agent.stop_reason`, timestamps | debugging stuck/failed sessions |
+| Session | `gen_ai.conversation.id`, `agent.session.id` | join key for per-session detail |
 
 ### 7.3 Defence in depth
 
@@ -1083,7 +1085,7 @@ flowchart LR
   redact -->|TLS, bearer auth| col["Collector"]
 
   subgraph col_proc["Collector processors"]
-    fil["filter/sanity<br/>require pi.user.id"]
+    fil["filter/sanity<br/>require agent.user.id"]
     redact2["attributes/redact<br/>delete prompt/completion/args"]
     fil --> redact2
   end
@@ -1099,10 +1101,10 @@ Two layers — the extension enforces the schema by construction, and the Collec
 
 | Threat | Mitigation |
 |---|---|
-| **Compromised developer machine emits forged data for another user** | Bearer tokens are per-user, tied to the SSO identity. A token can only emit data tagged with its issuing identity (Collector validates `pi.user.id` matches the token's claim). |
+| **Compromised developer machine emits forged data for another user** | Bearer tokens are per-user, tied to the SSO identity. A token can only emit data tagged with its issuing identity (Collector validates `agent.user.id` matches the token's claim). |
 | **Compromised collector token leaks** | Tokens are revocable from the admin page; rotation is a one-line config change for the developer. Tokens have a 90-day TTL. |
 | **MITM on the OTLP wire** | TLS only. Cert pinning optional in v1.5. |
-| **Postgres credentials leak** | API uses a read-only role. The Collector's writer role can only `INSERT INTO pi_spend_logs`. No `DELETE`/`UPDATE` grant on the spend log. |
+| **Postgres credentials leak** | API uses a read-only role. The Collector's writer role can only `INSERT INTO agent_spend_logs`. No `DELETE`/`UPDATE` grant on the spend log. |
 | **Insider (admin) reads another user's session detail** | All admin reads of session-level detail are logged to `audit_log` (a separate table). Admin pages display "you are viewing data on behalf of \<user\>" banner. |
 | **Aggregated data inference (deanonymisation in redacted mode)** | Workspace cwd hashing is per-user keyed; same project across two developers gets two different hashes. Reverse map is per-user opt-in. |
 
@@ -1166,10 +1168,10 @@ These are explicitly deferred until the spike (phase 0.1) gives us empirical dat
 2. **Single-tenant vs multi-tenant ingest?** Per-team collectors (clean blast radius, more ops) or one big collector with tenant routing (cheaper, must enforce auth strictly). Default: one collector with per-team bearer tokens.
 3. **What about pi-mom?** mom uses the same `pi-ai`/`pi-agent-core` stack. Same extension *should* work because the hook contract is identical — to be verified as part of phase 0.2.
 4. **Per-provider quirks.** Bedrock cost reporting can include "service tier" metadata; OpenRouter routes through other providers and re-attributes. Need to validate that pi-mono's `Usage.cost.total` actually reflects upstream-billed cost in those cases. The mykb area for pi-mono already lists a related fix (commit `45354153`: "capture usage from `choice.usage` for non-standard OpenAI-compatible providers"), suggesting this surface still has rough edges.
-5. **Compaction events.** A `session_compact` doubles input cost briefly. v1 reports it as a separate event with `pi.event.kind=compaction`. Whether dashboards show it inline or separately is a UX call.
-6. **Sub-agent attribution.** When (if) sub-agents land in pi, do we want to attribute their usage to the parent session or surface it separately? Plan for a `pi.parent.session_id` attribute now (already in the schema).
+5. **Compaction events.** A `session_compact` doubles input cost briefly. v1 reports it as a separate event with `agent.event.kind=compaction`. Whether dashboards show it inline or separately is a UX call.
+6. **Sub-agent attribution.** When (if) sub-agents land in pi, do we want to attribute their usage to the parent session or surface it separately? Plan for a `agent.parent.session_id` attribute now (already in the schema).
 7. **Cost-vs-billed-cost reconciliation.** Provider invoices arrive monthly and rarely match local estimates exactly. Out of scope for v1 (NG5); v2 may add an admin reconciliation view.
-8. **CI runner emission.** Do we want CI runs included in personal/team rollups, or filtered to a separate "automation" view? `pi.workspace.is_ci` is in the schema; the dashboards' default filters need a decision.
+8. **CI runner emission.** Do we want CI runs included in personal/team rollups, or filtered to a separate "automation" view? `agent.workspace.is_ci` is in the schema; the dashboards' default filters need a decision.
 
 ## 10. Decisions this document commits to
 

@@ -15,7 +15,7 @@ This document defines the **boundary between public artifacts and private deploy
 The boundary exists because the pi-usage system is split into three artifacts (per the [scope and deployment strategy](scope-and-deployment-STRATEGY.md)):
 
 1. The extension — public, organization-agnostic, this repo
-2. The reference dashboard server — public, organization-agnostic, future repo at `vilosource/pi-usage-dashboard`
+2. The reference dashboard server — public, organization-agnostic, future repo at `vilosource/agent-spend-dashboard`
 3. Per-organization deployments (Optiscan's, ViloForge's, anyone else's) — private, organization-specific
 
 The first two MUST be reusable by **any organization**. The third MUST contain everything the first two cannot. That is the boundary.
@@ -24,17 +24,17 @@ The first two MUST be reusable by **any organization**. The third MUST contain e
 
 **Public artifacts contain code, documentation, and example placeholders. Private artifacts contain real values.**
 
-If a value would identify a specific organization, expose a specific deployment, or leak a secret, it does not belong in this repo or in `vilosource/pi-usage-dashboard`. It belongs in that organization's private deployment repo.
+If a value would identify a specific organization, expose a specific deployment, or leak a secret, it does not belong in this repo or in `vilosource/agent-spend-dashboard`. It belongs in that organization's private deployment repo.
 
 ## 3. Public artifacts — what they MAY contain
 
-These items are explicitly allowed in `vilosource/pi-extensions` and the future `vilosource/pi-usage-dashboard`:
+These items are explicitly allowed in `vilosource/pi-extensions` and the future `vilosource/agent-spend-dashboard`:
 
 | Allowed | Examples |
 |---|---|
 | Source code, configs, docs that work for any organization | TypeScript, Postgres DDL, Collector pipeline YAML with env-var placeholders |
 | The `@vilosource` and `@vilosource-internal` npm scopes | `package.json` `"name"` fields |
-| The repo names `vilosource/pi-extensions`, `vilosource/pi-usage-dashboard` | README links, doc cross-references |
+| The repo names `vilosource/pi-extensions`, `vilosource/agent-spend-dashboard` | README links, doc cross-references |
 | Example values clearly marked as placeholders | `<organization-collector-host>`, `your-grafana.example.com`, `${ORG_FQDN}` |
 | Standard reserved-for-examples domains | `*.example.com`, `*.example.org`, `*.test`, `*.invalid` (per IETF RFC 2606) |
 | Public package names from the pi ecosystem | `@mariozechner/pi-coding-agent`, `@ccusage/pi`, etc. |
@@ -82,12 +82,12 @@ These items are forbidden in any public artifact. CI enforces this (§6).
 ```yaml
 # CORRECT — placeholder, would pass CI
 PI_USAGE_ENDPOINT: "https://<organization-collector-host>"
-DATABASE_URL: "postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:5432/pi_usage"
+DATABASE_URL: "postgres://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:5432/agent_spend"
 GRAFANA_URL: "https://grafana.example.com"
 
 # INCORRECT — would fail CI
 PI_USAGE_ENDPOINT: "https://otel.internal.viloforge.com"  # real FQDN
-DATABASE_URL: "postgres://otel:hunter2@pg-spend:5432/pi_usage"  # real credentials
+DATABASE_URL: "postgres://otel:hunter2@pg-spend:5432/agent_spend"  # real credentials
 GRAFANA_URL: "https://grafana.optiscan-internal.com"  # real org + FQDN
 ```
 
@@ -145,7 +145,7 @@ This document. The MAY / MUST NOT lists in §3-§5.
 
 ### Layer 2 — Repository separation
 
-The public artifacts live at `vilosource/pi-extensions` (this repo) and `vilosource/pi-usage-dashboard` (future). They are public on GitHub, MIT-licensed, accept external contributions.
+The public artifacts live at `vilosource/pi-extensions` (this repo) and `vilosource/agent-spend-dashboard` (future). They are public on GitHub, MIT-licensed, accept external contributions.
 
 Per-organization deployment artifacts live in private repos owned by that organization. For Optiscan that is an Optiscan-internal repo; for any other adopting organization it is theirs. **Vilosource does not host other organizations' private deployment repos.**
 
@@ -189,7 +189,7 @@ When a public file legitimately needs to contain a string that matches a pattern
 
 ## 7. The same boundary in the future dashboard repo
 
-When `vilosource/pi-usage-dashboard` is created, it inherits this strategy. The same `scripts/check-public-boundary.sh` and `.github/workflows/boundary.yml` are copied (or symlinked via a shared GitHub Actions reusable workflow). The denylist is identical. The allowlist is per-repo.
+When `vilosource/agent-spend-dashboard` is created, it inherits this strategy. The same `scripts/check-public-boundary.sh` and `.github/workflows/boundary.yml` are copied (or symlinked via a shared GitHub Actions reusable workflow). The denylist is identical. The allowlist is per-repo.
 
 ## 8. Why CI enforcement is non-negotiable
 
@@ -205,7 +205,7 @@ We considered "documentation only" and rejected it. Three reasons:
 2. **The CI denylist is the source of truth.** When in doubt, what the script forbids is what is forbidden.
 3. **The allowlist is a checked-in file (`.boundary-allowlist`)**, not a code change. Adding a file to the allowlist requires PR review, same as any other change.
 4. **Patterns include real organization names, internal FQDNs, internal-DNS suffixes, token-shaped strings, JWT-shaped strings, PEM private keys.** New patterns added when needed.
-5. **The same boundary applies to `vilosource/pi-usage-dashboard`** when it exists. The script and workflow are shared (copy or reusable workflow).
+5. **The same boundary applies to `vilosource/agent-spend-dashboard`** when it exists. The script and workflow are shared (copy or reusable workflow).
 6. **Vilosource hosts no organization's private deployment repo.** Optiscan, ViloForge, and any other adopting organization keep theirs in their own GitHub orgs.
 7. **Fixing a boundary violation is a tightening, not a documentation update.** If we discover that a forbidden value slipped in, we add a pattern to the denylist *and* remove the value, in the same PR.
 8. **AI agents working in either public repo are bound by this document.** [`AGENTS.md`](../../AGENTS.md) references it.

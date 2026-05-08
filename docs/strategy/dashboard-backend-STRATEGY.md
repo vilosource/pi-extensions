@@ -7,7 +7,7 @@
 **Workspace:** `pi-dev`
 **Related:** [`scope-and-deployment-STRATEGY.md`](scope-and-deployment-STRATEGY.md), [`pi-extensions-monorepo-STRATEGY.md`](pi-extensions-monorepo-STRATEGY.md), [`../design/pi-usage-reporter-DESIGN.md`](../design/pi-usage-reporter-DESIGN.md)
 
-> **Scope clarification.** Per the [scope and deployment strategy](scope-and-deployment-STRATEGY.md), this document describes the **reference dashboard server** — a future open-source project at `vilosource/pi-usage-dashboard`. It is one of several possible OTLP-compatible backends an organization can point the extension at. **The extension itself is organization-agnostic** and works against Honeycomb, Datadog, Grafana Cloud, a homemade receiver, or this reference server interchangeably. Optiscan's own deployment of the reference server (Docker Swarm + Azure Managed Postgres + company Grafana) is captured in a private Optiscan repo and is out of scope here.
+> **Scope clarification.** Per the [scope and deployment strategy](scope-and-deployment-STRATEGY.md), this document describes the **reference dashboard server** — a future open-source project at `vilosource/agent-spend-dashboard`. It is one of several possible OTLP-compatible backends an organization can point the extension at. **The extension itself is organization-agnostic** and works against Honeycomb, Datadog, Grafana Cloud, a homemade receiver, or this reference server interchangeably. Optiscan's own deployment of the reference server (Docker Swarm + Azure Managed Postgres + company Grafana) is captured in a private Optiscan repo and is out of scope here.
 
 ## 1. Decision
 
@@ -214,7 +214,7 @@ The Collector pipeline gains exporters for both backends. The extension does not
 flowchart TB
   recv["OTLP/HTTP receiver\n:4318, TLS, bearer auth"]
   recv --> proc["Processors:\n• filter/sanity\n• attributes/redact\n• batch\n• transform/team_lookup"]
-  proc --> exp_pg["Postgres exporter\n→ pi_spend_logs"]
+  proc --> exp_pg["Postgres exporter\n→ agent_spend_logs"]
   proc --> exp_prom["Prometheus remote_write\n→ company Mimir"]
   proc --> exp_tempo["OTLP exporter\n→ company Tempo"]
 ```

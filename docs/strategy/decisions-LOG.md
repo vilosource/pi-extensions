@@ -67,3 +67,43 @@ The `0.x` version stripe signals "experimental" until v1.0; that's the standard 
 2. Required fields: **Decision**, **Scope**, **Rationale**.
 3. Old entries are never edited. To correct a decision, write a new entry that explicitly says "supersedes D<n>".
 4. Commit on a feature branch; PR review confirms the decision was actually agreed; merge.
+
+---
+
+## 2026-05-08 · D7 · Pi-mom support deferred
+
+**Decision:** Pi-mom support is out of scope for v1. If/when pi-mom is deployed with this extension loaded, spend is attributed to the bot account (whatever `PI_USAGE_USER_ID` resolves to inside the mom container). No Slack-user attribution. No pi-mom-specific code paths. No mom-test scenarios in the lab.
+
+**Scope:** All public artifacts in `vilosource/pi-extensions` and the future `vilosource/agent-spend-dashboard`.
+
+**Rationale:** The extension is designed against the `pi-ai`/`pi-agent-core` hook contract, not against the CLI specifically. Mom should work as a side effect of correctness; verifying it before there is a real user costs more than the value it provides. Bot-account attribution is sufficient for "is the bot spending money?" visibility, which is the only question that matters until someone explicitly asks for more.
+
+---
+
+## 2026-05-08 · D8 · Dashboard renamed harness-agnostic; `agent.*` attribute namespace
+
+**Decision:**
+
+- The future dashboard repo is `vilosource/agent-spend-dashboard`, not `vilosource/pi-usage-dashboard`.
+- The custom (non-`gen_ai.*`) attribute namespace is `agent.*`, not `pi.*`. Every per-turn attribute is renamed accordingly (`agent.user.id`, `agent.machine.id`, `agent.session.id`, `agent.workspace.{cwd,repo,branch,is_ci}`, `agent.api.dialect`, `agent.cost.{input,output,cache_read,cache_write,total}.usd`, `agent.stop_reason`, `agent.event.kind`, `agent.parent.session_id`, `agent.tenant_id`).
+- Two new attributes added: `agent.harness.name` (e.g. `"pi"`, `"claude-code"`, `"cursor"`) and `agent.harness.version` (e.g. `"0.74.0"`).
+- Postgres table renamed: `agent_spend_logs`. Database renamed: `agent_spend`.
+- Histogram metric renamed: `agent.cost.usd`.
+- The pi extension package keeps its name (`@vilosource/pi-usage-reporter`); a future Claude Code extension would be `@vilosource/claude-code-spend-reporter` and emit the same `agent.*` attributes to the same dashboard.
+- The `PI_USAGE_*` env vars on the extension stay — they are the *pi extension's* env vars and pi-specificity is correct there.
+
+**Scope:** All public artifacts in `vilosource/pi-extensions` and the future `vilosource/agent-spend-dashboard`.
+
+**Rationale:**
+
+The OTel GenAI semantic conventions, the OTLP wire format, the per-user/team/finance dashboard surface, and the schema columns are not pi-specific in any meaningful sense. Pi was the first harness we instrumented, but the dashboard's value proposition (per-developer LLM spend visibility, attribution, audit) applies to any coding-agent harness that emits OTel GenAI.
+
+Naming the dashboard `pi-*` and the schema `pi_spend_logs` would lock the design to one harness when nothing about it actually requires that. Adding a Claude Code extension six months from now would either require schema migration or awkward `pi_user_id` columns containing Claude Code data.
+
+The extension stays pi-named because the extension *is* pi-specific (it hooks into pi's extension API; it could not be a Claude Code extension even if we wanted). This separation — extensions are per-harness, dashboard is harness-agnostic — is the correct factoring.
+
+`agent.harness.name` and `agent.harness.version` let the dashboard distinguish spend by harness without changing the schema. The pi extension sets `agent.harness.name = "pi"` automatically; future extensions for other harnesses set their own value.
+
+**Implements:** the harness-agnosticism implied by [`scope-and-deployment-STRATEGY.md`](scope-and-deployment-STRATEGY.md). That doc already said the extension and the dashboard are organization-agnostic; this decision extends the same logic to harness-agnosticism for the dashboard.
+
+**Migrations:** none — no code or data exists yet; this is a doc-only rename.

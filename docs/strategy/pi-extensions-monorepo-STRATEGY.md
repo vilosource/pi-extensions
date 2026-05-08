@@ -148,7 +148,7 @@ We deliberately do **not** use Nx, Turborepo, pnpm, Lerna, or Changesets. They'r
 To stop scope creep before it starts:
 
 - **mykb (`vilosource/mykb`)** — has its own release cadence, its own `~/.mykb/` brain integration, and a separate user community. Stays where it is. May reconsider after this repo proves out.
-- **The remote dashboard server** — separate repo `vilosource/pi-usage-dashboard` (or similar). The extension sends OTel; the dashboard ingests it. They release independently.
+- **The remote dashboard server** — separate repo `vilosource/agent-spend-dashboard` (or similar). The extension sends OTel; the dashboard ingests it. They release independently.
 - **Forks of pi-mono** — never. We are an extension citizen, not a fork maintainer.
 - **Internal company secrets, IdP-specific hardcoded URLs, customer data** — never in published packages. Endpoint URLs and tokens go in the operator's `~/.config/pi-usage/config.json`, not the package.
 - **Skills (SKILL.md folders)** without an accompanying extension — these can live here under `packages/skills/<name>/` for cohesion, but the moment they grow their own runtime they should be promoted to a real package.

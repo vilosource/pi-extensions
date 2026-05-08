@@ -12,7 +12,7 @@
 The pi-usage system is **three separate artifacts**, intentionally split by audience and lifecycle:
 
 1. **The extension** — `@vilosource/pi-usage-reporter`. A pi extension that emits OpenTelemetry over OTLP/HTTP to a configurable endpoint. Organization-agnostic. Distributed via public npm. Lives in this repo.
-2. **The reference dashboard server** — a separate open-source project providing a turnkey OTLP-compatible backend (Collector pipeline, Postgres schema, API, SPA, Grafana dashboard JSON). Organization-agnostic. Distributed as multiple deployment recipes (Docker Compose, Docker Swarm, Helm, bring-your-own-Postgres). To live in a future `vilosource/pi-usage-dashboard` repo.
+2. **The reference dashboard server** — a separate open-source project providing a turnkey OTLP-compatible backend (Collector pipeline, Postgres schema, API, SPA, Grafana dashboard JSON). Organization-agnostic. Distributed as multiple deployment recipes (Docker Compose, Docker Swarm, Helm, bring-your-own-Postgres). To live in a future `vilosource/agent-spend-dashboard` repo.
 3. **Optiscan's private deployment** — the actual running infrastructure that consumes the extension's data: Docker Swarm stack, Azure Managed Postgres, company Grafana / Prometheus, Vault-managed secrets, Optiscan-specific DNS, IdP, team mappings. Private. Lives in an Optiscan-internal repo. **Out of scope for this strategy and for the extension's design.**
 
 ```mermaid
@@ -20,7 +20,7 @@ flowchart LR
   subgraph public["Public, organization-agnostic"]
     direction TB
     ext["pi-usage-reporter<br/>extension<br/>(this repo, public npm)"]
-    refstack["Reference dashboard server<br/>vilosource/pi-usage-dashboard<br/>(future, public)"]
+    refstack["Reference dashboard server<br/>vilosource/agent-spend-dashboard<br/>(future, public)"]
   end
 
   subgraph optiscan["Optiscan deployment (private)"]
@@ -150,6 +150,6 @@ The decision QA that follows this strategy doc (D2-D6 in conversation) settles *
 5. **The reference server ships multiple deployment recipes.** Docker Compose, Docker Swarm, Helm, bring-your-own-Postgres. An organization picks the recipe that matches their environment.
 6. **No organization names, URLs, hostnames, or tokens are hardcoded** in either the extension or the reference server. CI in both repos validates this.
 7. **Optiscan-specific deployment lives in a private Optiscan repo.** It references the public artifacts as inputs; it never modifies them.
-8. **The reference server is a future repo** (`vilosource/pi-usage-dashboard`). Its design will live in that repo. The current design doc in this repo is for the extension only; the dashboard sections describe the reference server's *external contract* (what the extension expects on the other end of the OTLP wire) but not its internal implementation.
+8. **The reference server is a future repo** (`vilosource/agent-spend-dashboard`). Its design will live in that repo. The current design doc in this repo is for the extension only; the dashboard sections describe the reference server's *external contract* (what the extension expects on the other end of the OTLP wire) but not its internal implementation.
 9. **The phased delivery in the design doc** is now Optiscan's phased delivery — not the extension's, and not the reference server's. The extension itself ships when it works; the reference server ships when it works; how Optiscan rolls them out is its own concern.
 10. **Anywhere a public document appears to be making an Optiscan-specific assumption, it is a documentation bug** to be filed and fixed.
