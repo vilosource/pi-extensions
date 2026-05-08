@@ -71,3 +71,55 @@ Organization-specific deployment values live in **private deployment repos** own
 ## Decisions log
 
 Settled architectural decisions are recorded append-only in [`docs/strategy/decisions-LOG.md`](docs/strategy/decisions-LOG.md). New decisions go at the bottom; old ones are never edited (corrections are new entries that supersede the old). Reference an existing entry by its date and decision number (e.g. "per D5 in the decisions log") rather than re-arguing the question.
+
+## Mechanical enforcement
+
+The rules below are enforced by CI on every push and PR. Failing any of them blocks merge.
+
+| Tool | What it enforces | Config |
+|---|---|---|
+| **Biome** | format, lint hygiene (no `any`, `useConst`, `useNodejsImportProtocol`, `noUnusedImports`, `noUnusedVariables`, cognitive-complexity ≤ 15) | [`biome.json`](biome.json) |
+| **TypeScript strict** | `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `noPropertyAccessFromIndexSignature`, `useUnknownInCatchVariables` | [`tsconfig.base.json`](tsconfig.base.json) |
+| **dependency-cruiser** | architectural invariants: no cycles, no deep imports across packages, `src/shared/` is pure (no IO), no test imports from prod, no devDeps in prod | [`.dependency-cruiser.cjs`](.dependency-cruiser.cjs) |
+| **Vitest** | tests live next to source as `*.test.ts`; tests must pass | [`vitest.config.ts`](vitest.config.ts) |
+| **test-coverage check** | source changes ship with corresponding test changes (PR-only, soft floor) | [`scripts/check-tests-with-source.sh`](scripts/check-tests-with-source.sh) |
+| **Boundary** | no organization-specific values in source | [`scripts/check-public-boundary.sh`](scripts/check-public-boundary.sh) |
+
+Run all of them locally with `npm run check`. Each tool can also be run individually (`npm run lint`, `npm run typecheck`, `npm run depgraph`, `npm run test`, `npm run boundary`).
+
+When a rule false-positives on legitimate code, the fix is **either** to relax the rule in its config (with a justification in the PR), **or** to refactor the code. Do not add `// eslint-disable` style suppressions; if the rule is wrong, remove or weaken it; do not paper over.
+
+## Per-package layout
+
+Packages follow a layered structure demonstrated in [`packages/_template/`](packages/_template/):
+
+```
+packages/<name>/
+├── package.json                  # name = @vilosource/<name>; declares vitest as devDep
+├── tsconfig.json                 # extends ../../tsconfig.base.json
+├── README.md                     # what the package is, who uses it, how
+└── src/
+    ├── index.ts                  # public exports only; thin re-exports
+    ├── shared/                   # pure (no IO) — enforced by dependency-cruiser
+    │   ├── <module>.ts
+    │   └── <module>.test.ts      # tests live next to source
+    ├── extension/                # IO-performing layer for pi extensions
+    │   ├── index.ts              # the only file that imports pi APIs
+    │   └── ...
+    └── cli/                      # IO-performing layer for CLIs
+        └── ...
+```
+
+Start a new package with `node scripts/new-package.mjs <name>`. The script copies `_template/`, fills in placeholder names, and adds the new package to the root `tsconfig.json` references.
+
+## Things humans / agents are still expected to use judgement on
+
+The mechanical rules above catch broad categories of mistakes. They do **not** catch:
+
+- Whether an abstraction is the right one (vs. inlining or vs. a different shape).
+- Whether a name communicates the thing it names.
+- Whether an interface boundary is in the right place.
+- Whether a test actually exercises the behaviour it claims to (vs. just running the code).
+- Whether a comment is true.
+
+These are the things human review (and informed agent review) is for. The PR template asks the right questions; reviewers verify them.

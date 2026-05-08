@@ -1,0 +1,50 @@
+# Quality gate: lint, typecheck, dependency-cruiser, boundary, tests.
+# Runs on every push and pull request.
+#
+# The "test-coverage" job uses the boundary check's diff approach to verify
+# that source changes ship with test changes; it is a soft floor (warning
+# style) for now and may be promoted to hard fail once we have multiple
+# packages with stable test cultures.
+
+name: CI
+
+on:
+   push:
+      branches: [main]
+   pull_request:
+
+concurrency:
+   group: ci-${{ github.ref }}
+   cancel-in-progress: true
+
+jobs:
+   check:
+      name: Lint, typecheck, depgraph, tests
+      runs-on: ubuntu-latest
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+         - uses: actions/setup-node@v4
+           with:
+              node-version: 22
+              cache: npm
+         - run: npm ci
+         - name: Biome lint + format check
+           run: npm run lint:ci
+         - name: TypeScript build
+           run: npm run typecheck
+         - name: dependency-cruiser
+           run: npm run depgraph
+         - name: Vitest
+           run: npm run test
+
+   test-coverage:
+      name: Source changes ship with tests
+      runs-on: ubuntu-latest
+      if: github.event_name == 'pull_request'
+      steps:
+         - uses: actions/checkout@v4
+           with:
+              fetch-depth: 0
+         - run: bash scripts/check-tests-with-source.sh origin/${{ github.base_ref }}
