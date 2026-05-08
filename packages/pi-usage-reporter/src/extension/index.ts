@@ -6,11 +6,11 @@
  * ExtensionAPI provided by pi.
  *
  * Per the design (§3.4):
- *   - Resolve config + identity once at init.
- *   - Resolve workspace once per session_start.
+ *   - Resolve config + identity + harness version once at init.
+ *   - Resolve workspace and session id at session_start.
  *   - On message_end with an assistant message, build a TurnEvent and
  *     forward to the OtelSink.
- *   - On session_shutdown, flush.
+ *   - On session_shutdown, flush (errors swallowed per D11).
  *
  * The shape of pi's ExtensionAPI is intentionally NOT imported. This
  * extension is loaded BY pi at runtime; pi's package is a peer dep,
@@ -19,32 +19,37 @@
 
 import type { AssistantMessageSlice, Identity, TurnEvent, Workspace } from "../shared/types.js";
 import { loadConfig } from "./config.js";
+import { detectHarnessVersion } from "./harness-version.js";
 import { resolveIdentity } from "./identity.js";
 import { initOtel, type OtelSink } from "./otel.js";
+import { resolveSessionId } from "./session-id.js";
 import { resolveWorkspace } from "./workspace.js";
 
 /**
  * Structural type matching the subset of pi's ExtensionAPI we use.
  *
  * Defined here to keep the build-time dependency on pi optional (pi loads
- * us; we don't import pi). The shape is verified by the spike against
- * @earendil-works/pi-coding-agent >= 0.74.0.
+ * us; we don't import pi). The shape is verified by phase 0.1 spike
+ * against pi 0.66.1 and by upstream type inspection of @earendil-works/
+ * pi-coding-agent main as of 2026-05-08.
  */
 interface PiExtensionAPI {
+	on(event: "session_start", handler: () => void | Promise<void>): void;
 	on(event: "message_end", handler: (e: { message: AssistantMessageSlice | { role: string } }) => void): void;
 	on(event: "session_shutdown", handler: () => void | Promise<void>): void;
 	on(event: string, handler: (...args: unknown[]) => unknown): void;
-	session?: { id?: string };
 }
 
 /**
- * Per-session state. Resolved once at init (workspace) plus the
- * session_id we read from pi at message_end time.
+ * Per-session state. `identity` and `harnessVersion` are stable for the
+ * lifetime of the extension. `workspace` and `sessionId` are resolved per
+ * session_start.
  */
-interface SessionContext {
+interface SessionState {
 	readonly identity: Identity;
-	readonly workspace: Workspace;
 	readonly harnessVersion: string;
+	workspace: Workspace;
+	sessionId: string;
 }
 
 export default function piUsageReporter(pi: PiExtensionAPI): void {
@@ -57,11 +62,27 @@ export default function piUsageReporter(pi: PiExtensionAPI): void {
 	}
 
 	const identity = resolveIdentity();
-	const workspace = resolveWorkspace();
-	const harnessVersion = readHarnessVersion();
-	const ctx: SessionContext = { identity, workspace, harnessVersion };
-
+	const harnessVersion = detectHarnessVersion();
 	const otel: OtelSink = initOtel(cfg, identity);
+
+	const state: SessionState = {
+		identity,
+		harnessVersion,
+		// Initial values; refreshed on every session_start.
+		workspace: resolveWorkspace(),
+		sessionId: resolveSessionId({ cwd: process.cwd() }),
+	};
+
+	pi.on("session_start", () => {
+		// Pi may switch sessions during a process lifetime (resume, fork, new).
+		// Re-resolve per session_start so subsequent turns get the right id.
+		state.workspace = resolveWorkspace();
+		state.sessionId = resolveSessionId({ cwd: process.cwd() });
+		if (cfg.verbose) {
+			// eslint-disable-next-line no-console
+			console.warn(`[pi-usage-reporter] session_start: id=${state.sessionId} cwd=${state.workspace.cwd}`);
+		}
+	});
 
 	pi.on("message_end", (event) => {
 		const message = event.message;
@@ -71,7 +92,7 @@ export default function piUsageReporter(pi: PiExtensionAPI): void {
 
 		const turn: TurnEvent = {
 			kind: "turn",
-			sessionId: pi.session?.id ?? "unknown",
+			sessionId: state.sessionId,
 			provider: message.provider,
 			api: message.api,
 			model: message.model,
@@ -81,10 +102,10 @@ export default function piUsageReporter(pi: PiExtensionAPI): void {
 			timestamp: message.timestamp,
 		};
 		otel.recordTurn(turn, {
-			identity: ctx.identity,
-			workspace: ctx.workspace,
+			identity: state.identity,
+			workspace: state.workspace,
 			harnessName: "pi",
-			harnessVersion: ctx.harnessVersion,
+			harnessVersion: state.harnessVersion,
 		});
 	});
 
@@ -105,9 +126,4 @@ function isAssistantMessage(m: unknown): m is AssistantMessageSlice {
 		typeof r["stopReason"] === "string" &&
 		typeof r["timestamp"] === "number"
 	);
-}
-
-function readHarnessVersion(): string {
-	// Read from the running pi process if possible; for the spike, return unknown.
-	return "unknown";
 }

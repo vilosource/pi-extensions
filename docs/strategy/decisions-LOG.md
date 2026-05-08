@@ -181,3 +181,29 @@ try {
 The 5-second timeout is also new — without it, `sdk.shutdown()` can hang indefinitely when the receiver is unresponsive (different from unreachable: TCP connect succeeds but the HTTP request never completes).
 
 **Spike output:** confirmed in `/tmp/otel-spike` against Jaeger all-in-one. With Jaeger reachable, all 27 attributes arrive correctly, span renders in Jaeger UI. Without Jaeger, plain `await sdk.shutdown()` crashes the process; with the try/catch + timeout pattern above, exit is clean.
+
+---
+
+## 2026-05-08 · D12 · Subscription provider cost handling — `agent.cost.estimation`
+
+**Decision:** Add an `agent.cost.estimation` attribute (string enum: `metered` / `subscription` / `unreported`) to every emitted turn. Classifier is in `packages/pi-usage-reporter/src/shared/cost-classification.ts`:
+
+- `metered`: any cost bucket > 0 — the provider returned per-token cost data; dashboards render dollar amounts.
+- `subscription`: all costs are zero but token counts are > 0 — the provider didn't return cost (typical of subscription plans like GitHub Copilot, where pi-mono's `models.generated.ts` deliberately omits the `cost` field). Dashboards render adoption/token metrics; financial views ignore these rows.
+- `unreported`: both costs and tokens are zero — likely an aborted, errored, or no-op turn. Dashboards filter these out by default.
+
+**Scope:** `packages/pi-usage-reporter` and the schema in `docs/design/pi-usage-reporter-DESIGN.md` §3.9.
+
+**Rationale:** Resolves spike-defect D2 from the phase 0.1 retrospective.
+
+The phase 0.1 spike discovered that GitHub Copilot (subscription-billed) returns `Usage` with `cost.total = 0`. pi-mono's `models.generated.ts` confirms this is by design: Copilot model entries deliberately omit the `cost` field because Copilot is subscription-billed, not per-token. Without an explicit signal, the dashboard cannot distinguish "this turn really cost zero" from "we don't have cost data for this provider."
+
+We considered three options (per the spike retrospective):
+1. **Estimate cost client-side** from a published rate. Rejected: subscription users may not pay per-token at all; estimating dollars where there are no per-call dollars would be misleading.
+2. **Surface explicitly via an attribute.** Chosen.
+3. **Skip telemetry entirely for subscription providers.** Rejected: loses the adoption signal, which is independently valuable.
+
+The classifier is a pure function with 5 unit tests. Verified end-to-end against pi 0.66.1 + Copilot: `agent.cost.estimation = subscription` arrives in Jaeger as expected.
+
+**Implementation note:** The spike retrospective claimed Copilot returns "all zeros" including tokens. That was wrong: Copilot **does** return token counts, just not cost. Verified: `gen_ai.usage.input_tokens = 6` for the phase 0.2 verification turn. Adoption metrics work even on subscription providers.
+
