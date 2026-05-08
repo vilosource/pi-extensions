@@ -107,3 +107,21 @@ The extension stays pi-named because the extension *is* pi-specific (it hooks in
 **Implements:** the harness-agnosticism implied by [`scope-and-deployment-STRATEGY.md`](scope-and-deployment-STRATEGY.md). That doc already said the extension and the dashboard are organization-agnostic; this decision extends the same logic to harness-agnosticism for the dashboard.
 
 **Migrations:** none — no code or data exists yet; this is a doc-only rename.
+
+---
+
+## 2026-05-08 · D9 · Quality floor — mechanical enforcement before any package code
+
+**Decision:** Establish a mechanical quality floor before any package code lands. Specifically: TypeScript strict (with `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `noPropertyAccessFromIndexSignature`, `useUnknownInCatchVariables`), Biome (with `noExplicitAny: error`, `useConst`, `useNodejsImportProtocol`, `noUnusedImports`, `noUnusedVariables`, cognitive-complexity ≤ 15), `dependency-cruiser` (no cycles, no deep imports across packages, `src/shared/` is pure, no test imports from prod, no devDeps in prod), Vitest with tests next to source, a "source changes ship with tests" PR-gate, and a 3-field PR template. The full set is documented in [`AGENTS.md`](../../AGENTS.md#mechanical-enforcement) and runnable as `npm run check`.
+
+**Scope:** `vilosource/pi-extensions`. The same pattern will be applied to `vilosource/agent-spend-dashboard` when its code starts.
+
+**Rationale:** Doc-only enforcement of architectural principles decays. Mechanical CI is the only enforcement that holds against tired humans and LLM agents. We deliberately set up the floor *before* any package code lands, so the first line of code is written against the gates rather than retrofitting gates around legacy code.
+
+We resisted maximalism: no eslint-plugin-functional, no `tsarch`, no Stryker mutation testing, no coverage thresholds. Each of those would have produced more friction than value at this scope. The floor includes only rules that catch concrete classes of error we have specific reason to want caught. Rules will be tuned by deletion as easily as by addition.
+
+The architecture document at [`architecture-PRINCIPLES.md`](architecture-PRINCIPLES.md) is intentionally **descriptive, not prescriptive**: it records the patterns this codebase uses, with links to where each pattern appears in code. It does not list aspirational principles. The reference implementation at [`packages/_template/`](../../packages/_template/) is the architecture document agents will actually pattern-match on.
+
+The PR template is **3 fields** (what / why / what test): minimal accountability without becoming ritual.
+
+**Patterns explicitly named as "avoid":** Singleton, god-class controllers, Active Record, deep inheritance trees, speculative abstractions. (See `architecture-PRINCIPLES.md`.)
