@@ -170,29 +170,47 @@ The SPA's scope shrinks to what only it can do: per-user views, per-developer dr
 
 For an organization without Grafana, the reference server still works in **Shape 2**: Postgres-only, with the SPA's ops pages becoming load-bearing rather than supplementary. Both shapes are supported; the dashboards JSON is just optional.
 
-## 6. Phased delivery (revised)
+## 6. Phased delivery (revised again, 2026-05-08)
+
+Updated to reflect actual progress and the [API+SPA design](https://github.com/vilosource/agent-spend-dashboard/blob/main/docs/design/api-and-spa-DESIGN.md). Phases 0.1, 0.2, and the bridge-based ingest are **shipped**. Phase 0.3 (API + SPA + multi-IdP OIDC) is the active work; the bridge sunsets at the end of 0.3 per [D6 in the dashboard's decisions log](https://github.com/vilosource/agent-spend-dashboard/blob/main/docs/strategy/decisions-LOG.md).
 
 ```mermaid
 gantt
-  title Pi Usage Reporter — phased delivery
+  title Reference dashboard server — phased delivery (2026-05-08)
   dateFormat YYYY-MM-DD
   axisFormat %b
-  section Spike
-  0.1 Extension → local Jaeger          :p01, 2026-05-12, 5d
-  section MVP — Grafana first
-  0.2 Collector + Mimir + Tempo         :p02, after p01, 5d
-  0.2 Pre-built Grafana dashboard JSON  :p02b, after p01, 5d
-  0.2 First panels live for one team    :milestone, after p02, 0d
-  section Postgres + SPA
-  0.3 Postgres exporter + schema        :p03, after p02, 4d
-  0.3 API + SSO + per-user view         :p04, after p03, 8d
-  0.4 Team and admin views, alerts      :p05, after p04, 6d
+  section Done
+  0.1 Extension → local Jaeger spike      :done, p01, 2026-05-08, 1d
+  0.1.fixes  D1+D2+D3 (session id, etc.)  :done, p01b, after p01, 1d
+  0.2 Lab foundation (Compose+PG+Coll)    :done, p02, after p01b, 1d
+  0.2 Grafana dashboards (3 panels)        :done, p02b, after p02, 1d
+  section Active
+  0.3 API+SPA — design + strategy docs    :done, p03d, after p02b, 1d
+  0.3 service skeleton + Postgres tables   :p03a, after p03d, 3d
+  0.3 OIDC against Dex + LAB_NO_AUTH       :p03b, after p03a, 4d
+  0.3 OTLP /v1/traces ingest               :p03c, after p03b, 2d
+  0.3 SPA: Login + /me page                :p03d2, after p03c, 4d
+  0.3 Sunset bridge from prod compose      :milestone, p03e, after p03c, 0d
+  0.3 SPA: /install + tokens               :p03f, after p03d2, 2d
+  0.3 SPA: /team and /admin                :p03g, after p03d2, 4d
   section Hardening
-  0.5 WAL + backfill + redaction        :p06, after p05, 5d
-  1.0 GA, retention, audit export       :p07, after p06, 5d
+  0.4 WAL + backfill + redaction           :p04, after p03g, 5d
+  0.5 Audit export + Device-flow login    :p05, after p04, 3d
+  1.0 GA, retention, first-time onboarding :p06, after p05, 5d
 ```
 
-The order is the load-bearing change. **Grafana first** means a deploying organization with an existing Grafana stack can see real numbers in their existing dashboards within ~10 working days of starting, before any custom UI exists. Organizations without Grafana follow the same gantt but skip phase 0.2 and start at 0.3.
+What's already shipped:
+
+- **0.1 spike**: extension loads in pi, emits 27 attributes to Jaeger end-to-end. (`vilosource/pi-extensions` commit `0fb4623`)
+- **0.1 follow-up**: D1 (session id), D2 (subscription cost classification), D3 (harness version) all fixed.
+- **0.2 lab foundation**: Compose stack, agent_spend_logs schema, OTel Collector, Python bridge, synthetic seeder. (`vilosource/agent-spend-dashboard` commit `7d936a5`)
+- **0.2 Grafana**: three pre-built dashboards (Org Overview, By Team, Burn Rate) provisioned and visible at `http://localhost:3000`. (`88786de`)
+
+What's active:
+
+- **0.3 API + SPA**: detailed design landed [here](https://github.com/vilosource/agent-spend-dashboard/blob/main/docs/design/api-and-spa-DESIGN.md); implementation phased over ~25 working days. The path from "OIDC works" to "I can see my own data on the SPA" is the first 8 days of that phase.
+
+**The original "Grafana first" sequencing held up.** The Grafana dashboards are real and useful right now without the SPA existing; the SPA and Grafana then ship complementarily, never competing. Per [D5 in the dashboard's decisions log](https://github.com/vilosource/agent-spend-dashboard/blob/main/docs/strategy/decisions-LOG.md), the SPA covers per-user RBAC, finance exports, audit — the things Grafana cannot do. Grafana keeps the org/team/ops view.
 
 ## 7. Caveats, called out explicitly
 
