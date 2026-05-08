@@ -282,7 +282,7 @@ The `grafana/dashboards/` directory is shipped in the npm package so anyone runn
     "zod": "^3.x"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.52.0"
+    "@earendil-works/pi-coding-agent": ">=0.74.0"
   }
 }
 ```
@@ -321,7 +321,7 @@ flowchart TB
 
 ```ts
 // src/extension/index.ts
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { loadConfig } from "./config.js";
 import { resolveIdentity } from "./identity.js";
 import { initOtel } from "./otel.js";
