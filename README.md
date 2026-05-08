@@ -37,8 +37,10 @@ Cross-cutting decisions that apply to every package in this repo.
 | Doc | Subject |
 |---|---|
 | [`scope-and-deployment-STRATEGY.md`](docs/strategy/scope-and-deployment-STRATEGY.md) | Three-artifact split (extension, reference dashboard server, organization deployments). Read this first. |
+| [`public-boundary-STRATEGY.md`](docs/strategy/public-boundary-STRATEGY.md) | What may and may not appear in public artifacts; CI enforcement |
 | [`pi-extensions-monorepo-STRATEGY.md`](docs/strategy/pi-extensions-monorepo-STRATEGY.md) | Why monorepo, why npm workspaces, naming conventions, tooling, release flow |
 | [`dashboard-backend-STRATEGY.md`](docs/strategy/dashboard-backend-STRATEGY.md) | Reference dashboard server: Grafana + Postgres dual backend; phased delivery order |
+| [`decisions-LOG.md`](docs/strategy/decisions-LOG.md) | Append-only log of small settled decisions |
 
 ### Design
 

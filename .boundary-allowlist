@@ -1,0 +1,27 @@
+# .boundary-allowlist
+#
+# Files in this list are exempt from scripts/check-public-boundary.sh.
+# Each entry MUST include a one-line comment explaining why the file
+# legitimately needs to contain something that matches a denylist pattern.
+#
+# Format: one path per line, glob patterns allowed.
+# Empty lines and lines starting with # are ignored.
+#
+# See docs/strategy/public-boundary-STRATEGY.md for the rules.
+
+# Documents that explicitly name organizations to *describe the boundary*.
+# They reference "Optiscan" and "viloforge.com" only to say which values
+# do NOT belong in public artifacts. Removing the references would defeat
+# the doc's purpose.
+docs/strategy/scope-and-deployment-STRATEGY.md
+docs/strategy/public-boundary-STRATEGY.md
+
+# The CI script itself contains the denylist regexes, which include the
+# patterns we are forbidding elsewhere.
+scripts/check-public-boundary.sh
+
+# Design and strategy docs that contain example connection strings with
+# placeholder credentials (e.g. "postgres://otel:...@pg-spend"). The "..."
+# is a literal placeholder; no real credential is exposed. Reviewer
+# verifies during PR review.
+docs/design/pi-usage-reporter-DESIGN.md

@@ -56,3 +56,18 @@ Conventions:
 - **No theme directives** in diagram source. Let GitHub render with its default theme.
 - **Above each diagram, write one sentence describing what it shows** so readers in plain-text viewers still understand the intent.
 - **Keep each diagram under ~40 nodes.** Split into "context" and "detail" diagrams when larger.
+
+## Public / private boundary
+
+This repository is **public**. Per [`docs/strategy/public-boundary-STRATEGY.md`](docs/strategy/public-boundary-STRATEGY.md):
+
+- Real organization names (other than vilosource), real FQDNs, real tokens, real Vault paths, real cloud-resource IDs **MUST NOT** appear in this repo. Use placeholders (`<organization-collector-host>`, `*.example.com`, `${ENV_VAR}`).
+- A regex denylist enforces this on every push and PR (`scripts/check-public-boundary.sh`, `.github/workflows/boundary.yml`).
+- If a placeholder triggers a false positive, add the file to `.boundary-allowlist` with a one-line justification, in the same PR.
+- When generating examples, defer to the placeholders the rest of the repo uses. Do not invent realistic-looking FQDNs or tokens.
+
+Organization-specific deployment values live in **private deployment repos** owned by each adopting organization, never here.
+
+## Decisions log
+
+Settled architectural decisions are recorded append-only in [`docs/strategy/decisions-LOG.md`](docs/strategy/decisions-LOG.md). New decisions go at the bottom; old ones are never edited (corrections are new entries that supersede the old). Reference an existing entry by its date and decision number (e.g. "per D5 in the decisions log") rather than re-arguing the question.

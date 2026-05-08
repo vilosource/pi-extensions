@@ -282,7 +282,7 @@ The `grafana/dashboards/` directory is shipped in the npm package so anyone runn
     "zod": "^3.x"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.30.0"
+    "@mariozechner/pi-coding-agent": ">=0.52.0"
   }
 }
 ```
