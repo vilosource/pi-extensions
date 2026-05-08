@@ -8,7 +8,7 @@ This is a monorepo. Each extension is published as its own scoped npm package un
 
 | Package | Description | Status |
 |---|---|---|
-| `@vilosource/pi-usage-reporter` | Per-developer token usage and cost telemetry, shipped over OpenTelemetry to a centralized Grafana stack and Postgres-backed dashboard | Design ([DESIGN](docs/design/pi-usage-reporter-DESIGN.md), [research](docs/research/usage-tracking-dashboard-RESEARCH.md)) |
+| `@vilosource/pi-usage-reporter` | Per-developer token usage and cost telemetry, shipped over OpenTelemetry to a centralized Grafana stack and Postgres-backed dashboard | **Phase 0.1 spike shipped** — emits real OTLP spans against the lab Collector; 42 tests pass; verified end-to-end with seeded dashboards. ([DESIGN](docs/design/pi-usage-reporter-DESIGN.md), [research](docs/research/usage-tracking-dashboard-RESEARCH.md), [decisions](docs/strategy/decisions-LOG.md)) |
 
 (More to come.)
 
