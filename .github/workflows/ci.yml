@@ -1,10 +1,8 @@
 # Quality gate: lint, typecheck, dependency-cruiser, boundary, tests.
-# Runs on every push and pull request.
+# Runs on every push to main and every pull request.
 #
-# The "test-coverage" job uses the boundary check's diff approach to verify
-# that source changes ship with test changes; it is a soft floor (warning
-# style) for now and may be promoted to hard fail once we have multiple
-# packages with stable test cultures.
+# The "test-coverage" job is PR-only and verifies that source changes
+# ship with corresponding test changes.
 
 name: CI
 
@@ -27,9 +25,14 @@ jobs:
               fetch-depth: 0
          - uses: actions/setup-node@v4
            with:
-              node-version: 22
+              node-version: "22.11"
               cache: npm
-         - run: npm ci
+         - name: Print versions
+           run: |
+              node --version
+              npm --version
+         - name: Install dependencies
+           run: npm ci --no-audit --no-fund
          - name: Biome lint + format check
            run: npm run lint:ci
          - name: TypeScript build
