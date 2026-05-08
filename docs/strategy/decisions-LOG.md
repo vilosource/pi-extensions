@@ -125,3 +125,59 @@ The architecture document at [`architecture-PRINCIPLES.md`](architecture-PRINCIP
 The PR template is **3 fields** (what / why / what test): minimal accountability without becoming ritual.
 
 **Patterns explicitly named as "avoid":** Singleton, god-class controllers, Active Record, deep inheritance trees, speculative abstractions. (See `architecture-PRINCIPLES.md`.)
+
+---
+
+## 2026-05-08 · D10 · Pi-mono package scope migrated to @earendil-works (supersedes D6)
+
+**Decision:** Update package references throughout the codebase: `@mariozechner/pi-coding-agent` → `@earendil-works/pi-coding-agent`, same for `pi-agent-core`, `pi-ai`, `pi-tui`. The package.json `peerDependencies` for `@vilosource/pi-usage-reporter` is `"@earendil-works/pi-coding-agent": ">=0.74.0"` (was `">=0.52.0"` against the Mariozechner scope per D6, but that scope is no longer the canonical home).
+
+**Scope:** All packages in `vilosource/pi-extensions`. Documentation references in `docs/`. The design doc's §3.2 `package.json` example.
+
+**Rationale:** Pi-mono was transferred from Mario Zechner to the earendil-works organization. Both the GitHub repository (already documented as the redirect from `badlogic/pi-mono` → `earendil-works/pi`) and the npm packages followed. Latest under `@mariozechner` is **0.73.1** (frozen May 7, 2026); newest releases under `@earendil-works` start at **0.74.0**.
+
+The hook event shapes are unchanged between the two scopes:
+- `Usage` interface is identical
+- `AssistantMessage` adds three optional fields (`responseModel`, `responseId`, `diagnostics`) but is backward-compatible
+- `MessageEndEvent`, `SessionShutdownEvent`, `SessionCompactEvent`, `ModelSelectEvent` shapes unchanged
+
+So the design doc's hook usage and `Usage` mapping require no change — only the package name and version.
+
+**Implementation note:** the new `responseModel` field maps cleanly to `gen_ai.response.model` in our schema (when set, it differs from `gen_ai.request.model` for routing providers like OpenRouter `auto`). Use it.
+
+**Supersedes:** D6 in full. The `>=0.52.0` lower bound under the old scope is moot because no one will install the new extension against the old (frozen) scope.
+
+---
+
+## 2026-05-08 · D11 · OTel SDK shutdown errors must be caught
+
+**Decision:** The extension's `session_shutdown` hook handler MUST wrap `sdk.shutdown()` in a `try/catch` and swallow any error after logging at warn level. The extension MUST NOT propagate OTel SDK shutdown errors to pi.
+
+**Scope:** `packages/pi-usage-reporter/src/extension/otel.ts` and the corresponding hook handler.
+
+**Rationale:** The phase 0.1 spike (run 2026-05-08) discovered that when the OTel collector endpoint is unreachable at shutdown time, `await sdk.shutdown()` raises an **uncaught exception** of `ECONNREFUSED` shape, which Node treats as fatal and crashes the process.
+
+In our context, the process is the developer's pi session. A crash on session end would cause two visible problems: (1) pi exits with a non-zero status when it would otherwise have exited cleanly, masking the developer's actual exit intent; (2) any post-shutdown work pi does (writing the session JSONL, etc.) is skipped.
+
+The extension's contract is that telemetry never affects the user's pi session. Telemetry failures must be silent at worst, warning-logged at best. This is the same posture as the WAL design: collector down → events stay in WAL → next run replays them. A failed shutdown is the same case — events stay buffered, get replayed next run.
+
+**Implementation pattern:**
+
+```typescript
+try {
+  await Promise.race([
+    sdk.shutdown(),
+    new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error("OTel shutdown timeout")), 5000),
+    ),
+  ]);
+} catch (err) {
+  if (cfg.verbose) {
+    console.warn("[pi-usage-reporter] OTel shutdown failed (telemetry events stay in WAL):", err);
+  }
+}
+```
+
+The 5-second timeout is also new — without it, `sdk.shutdown()` can hang indefinitely when the receiver is unresponsive (different from unreachable: TCP connect succeeds but the HTTP request never completes).
+
+**Spike output:** confirmed in `/tmp/otel-spike` against Jaeger all-in-one. With Jaeger reachable, all 27 attributes arrive correctly, span renders in Jaeger UI. Without Jaeger, plain `await sdk.shutdown()` crashes the process; with the try/catch + timeout pattern above, exit is clean.
