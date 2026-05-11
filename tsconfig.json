@@ -6,6 +6,9 @@
 		},
 		{
 			"path": "packages/pi-usage-reporter"
+		},
+		{
+			"path": "packages/pi-token-tracker"
 		}
 	]
 }

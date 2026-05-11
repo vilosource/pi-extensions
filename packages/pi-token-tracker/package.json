@@ -1,0 +1,66 @@
+{
+	"name": "@vilosource/pi-token-tracker",
+	"version": "0.0.0",
+	"type": "module",
+	"description": "Per-developer AI coding-agent token usage telemetry over OpenTelemetry GenAI, with a device-flow login CLI for the token-tracker backend",
+	"license": "MIT",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"bin": {
+		"token-tracker": "./dist/cli/index.js"
+	},
+	"exports": {
+		".": {
+			"import": "./dist/index.js",
+			"types": "./dist/index.d.ts"
+		},
+		"./extension": {
+			"import": "./dist/extension/index.js",
+			"types": "./dist/extension/index.d.ts"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "tsc -b",
+		"test": "vitest run --dir src"
+	},
+	"devDependencies": {
+		"vitest": "^3.0.0"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"keywords": [
+		"pi-package",
+		"pi-extension",
+		"opentelemetry",
+		"telemetry",
+		"usage",
+		"token-tracker"
+	],
+	"pi": {
+		"extensions": [
+			"./dist/extension"
+		]
+	},
+	"dependencies": {
+		"@opentelemetry/api": "^1.9.0",
+		"@opentelemetry/sdk-node": "^0.217.0",
+		"@opentelemetry/exporter-trace-otlp-http": "^0.217.0",
+		"@opentelemetry/exporter-metrics-otlp-http": "^0.217.0",
+		"@opentelemetry/sdk-metrics": "^2.7.0",
+		"@opentelemetry/resources": "^2.7.0",
+		"@opentelemetry/semantic-conventions": "^1.40.0"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": ">=0.74.0"
+	},
+	"peerDependenciesMeta": {
+		"@earendil-works/pi-coding-agent": {
+			"optional": true
+		}
+	}
+}
