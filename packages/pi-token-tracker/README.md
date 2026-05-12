@@ -106,25 +106,24 @@ rule. The `auth/`, `extension/`, and `cli/` layers perform IO.
   signed in, or the backend is unreachable, it emits at most one stderr line
   and otherwise does nothing — telemetry failures never affect your session.
 
-## Local smoke test against the token-tracker lab
+## End-to-end smoke against the token-tracker lab
+
+The token-tracker source repo ships a lab (its own OIDC IdP — which supports
+the device flow — plus the API + Postgres). With it up, `npm run smoke` in this
+package drives the full path automatically (no browser, no LLM): `token-tracker
+install` into a throwaway pi settings file → `token-tracker login` (device flow,
+auto-approved via the lab IdP's `/device` page) → `token-tracker status` →
+fires one synthetic assistant turn through the built extension → asserts a
+`usage_log` row landed with `user_id` taken from the verified token.
 
 ```bash
-# 1. Bring up the token-tracker source repo's lab (its own IdP + API + Postgres)
-cd ~/GitHub/token-tracker && make lab
-
-# 2. Build this package
+cd ~/GitHub/token-tracker && make lab          # bring the lab up
 cd ~/GitHub/pi-extensions && npm run build
-
-# 3. Sign in against the lab IdP (values from `make lab` output / lab/idp config)
-node packages/pi-token-tracker/dist/cli/index.js login \
-  --endpoint=http://localhost:7080 \
-  --authority=<lab-idp-issuer-url> \
-  --client-id=<lab-client-id> \
-  --api-scope=<lab-api-scope>
-node packages/pi-token-tracker/dist/cli/index.js status
-
-# 4. Run pi with this extension loaded and confirm a usage_log row lands
-#    (TOKEN_TRACKER_ENDPOINT defaults to the saved config; verbose for debugging)
-TOKEN_TRACKER_VERBOSE=1 pi
-#    then: make psql  →  select * from usage_log order by ts desc limit 5;
+npm --workspace=@vilosource/pi-token-tracker run smoke
+# (env knobs: LAB_API, LAB_IDP, PG_CONTAINER, LAB_USER — see scripts/lab-smoke.sh)
 ```
+
+For a manual run against a real `pi`: do `token-tracker install` + `token-tracker
+login --endpoint=… --authority=… --client-id=… --api-scope=…`, restart `pi`,
+run it with `TOKEN_TRACKER_VERBOSE=1`, then `make psql` →
+`select * from usage_log order by ts desc limit 5;`.
