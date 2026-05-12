@@ -1,6 +1,6 @@
 {
 	"name": "@vilosource/pi-token-tracker",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"type": "module",
 	"description": "Per-developer AI coding-agent token usage telemetry over OpenTelemetry GenAI, with a device-flow login CLI for the token-tracker backend",
 	"license": "MIT",
