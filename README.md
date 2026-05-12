@@ -8,29 +8,23 @@ This is a monorepo. Each extension is published as its own scoped npm package un
 
 | Package | Description | Status |
 |---|---|---|
-| `@vilosource/pi-usage-reporter` | Per-developer token usage and cost telemetry, shipped over OpenTelemetry to a centralized Grafana stack and Postgres-backed dashboard | **Phase 0.1 spike shipped** — emits real OTLP spans against the lab Collector; 42 tests pass; verified end-to-end with seeded dashboards. ([DESIGN](docs/design/pi-usage-reporter-DESIGN.md), [research](docs/research/usage-tracking-dashboard-RESEARCH.md), [decisions](docs/strategy/decisions-LOG.md)) |
+| `@vilosource/pi-token-tracker` | Per-developer AI coding-agent token-usage telemetry over OpenTelemetry GenAI to the [token-tracker](https://github.com/vilosource/token-tracker) backend, plus a `token-tracker` device-flow login CLI (`install` / `login` / `status` / `logout` / `uninstall`) | 148 unit tests + a green lab end-to-end smoke (`npm run smoke`). Pre-publish. ([README](packages/pi-token-tracker/README.md)) |
 
-(More to come.)
+> `@vilosource/pi-usage-reporter` (the predecessor, which targeted the legacy `agent-spend` backend) was **removed 2026-05-12** when that backend was decommissioned — superseded by `@vilosource/pi-token-tracker`. Its design notes are kept at [`docs/design/pi-usage-reporter-DESIGN.md`](docs/design/pi-usage-reporter-DESIGN.md) for history.
 
 ## Install
 
-Each package can be installed individually from npm:
-
 ```bash
-pi install npm:@vilosource/pi-usage-reporter
+npm i -g @vilosource/pi-token-tracker
+token-tracker install                # registers the extension in ~/.pi/agent/settings.json
+token-tracker login --endpoint=… --authority=… --client-id=… --api-scope=…
 ```
 
-Or, for a curated bundle of the whole repo:
-
-```bash
-pi install git:github.com/vilosource/pi-extensions
-```
-
-then filter to the packages you want in `~/.pi/agent/settings.json` per the [Pi packages docs](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/packages.md).
+See [`packages/pi-token-tracker/README.md`](packages/pi-token-tracker/README.md) for the full setup. For a specific deployment the four `login` values are fixed — wrap the three commands in an internal setup snippet so developers paste one line.
 
 ## Companion repo
 
-The **dashboard** that consumes OTel events from this extension lives in a separate repository: [`vilosource/agent-spend-dashboard`](https://github.com/vilosource/agent-spend-dashboard). It is harness-agnostic — future Claude Code, Cursor, or Aider extensions emit the same `agent.*` attributes to the same dashboard. See [`docs/strategy/scope-and-deployment-STRATEGY.md`](docs/strategy/scope-and-deployment-STRATEGY.md) for the three-artifact split.
+The **dashboard** that consumes the OTel events lives in a separate repository: [`vilosource/token-tracker`](https://github.com/vilosource/token-tracker) (formerly `agent-spend-dashboard`). It is harness-agnostic — future Claude Code, Cursor, or Aider extensions emit the same `agent.*` attributes to the same dashboard. See [`docs/strategy/scope-and-deployment-STRATEGY.md`](docs/strategy/scope-and-deployment-STRATEGY.md) for the three-artifact split.
 
 ## Documentation
 
@@ -53,7 +47,7 @@ Per-package design documents.
 
 | Doc | Package |
 |---|---|
-| [`pi-usage-reporter-DESIGN.md`](docs/design/pi-usage-reporter-DESIGN.md) | `@vilosource/pi-usage-reporter` |
+| [`pi-usage-reporter-DESIGN.md`](docs/design/pi-usage-reporter-DESIGN.md) | `@vilosource/pi-usage-reporter` — **historical** (package removed 2026-05-12); the successor `@vilosource/pi-token-tracker`'s design lives upstream in [`vilosource/token-tracker` → `docs/design/token-tracker-redesign-DESIGN.md`](https://github.com/vilosource/token-tracker/blob/main/docs/design/token-tracker-redesign-DESIGN.md) |
 
 ### Research
 

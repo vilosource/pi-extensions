@@ -1,7 +1,18 @@
 # `@vilosource/pi-usage-reporter` — Design Document
 
+> **⚠️ Historical / superseded.** The `@vilosource/pi-usage-reporter` package was
+> removed from this repo on **2026-05-12** when the legacy `agent-spend` backend it
+> targeted was decommissioned. Its successor is **`@vilosource/pi-token-tracker`**
+> (`packages/pi-token-tracker/`) — same `agent.*` OTel schema and `Usage`→attributes
+> mapping, plus a device-flow login CLI for the OAuth2-resource-server backend. The
+> successor's design lives upstream in [`vilosource/token-tracker` →
+> `docs/design/token-tracker-redesign-DESIGN.md`](https://github.com/vilosource/token-tracker/blob/main/docs/design/token-tracker-redesign-DESIGN.md).
+> This document is kept for history; sections describing the agent-spend backend,
+> the bearer-token install paths, and the Collector pipeline no longer reflect a
+> live system.
+
 **Document type:** Design
-**Status:** Draft for review
+**Status:** Superseded (was: Draft for review)
 **Date:** 2026-05-08
 **Owner:** Platform / DevEx
 **Repo home:** [`vilosource/pi-extensions`](https://github.com/vilosource/pi-extensions), package `packages/pi-usage-reporter/`

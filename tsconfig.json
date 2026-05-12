@@ -5,9 +5,6 @@
 			"path": "packages/_template"
 		},
 		{
-			"path": "packages/pi-usage-reporter"
-		},
-		{
 			"path": "packages/pi-token-tracker"
 		}
 	]
