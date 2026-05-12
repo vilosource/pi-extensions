@@ -18,7 +18,7 @@
  */
 
 import { readAuthData } from "../auth/auth-file.js";
-import { loadCliConfig } from "../auth/config.js";
+import { insecureUrlWarnings, loadCliConfig } from "../auth/config.js";
 import type { AssistantMessageSlice, Identity, TurnEvent, Workspace } from "../shared/types.js";
 import { loadExtensionConfig } from "./config.js";
 import { detectHarnessVersion } from "./harness-version.js";
@@ -63,6 +63,7 @@ export default function piTokenTracker(pi: PiExtensionAPI): void {
 		warnOnce("no stored credentials — run `token-tracker login`. Telemetry disabled.");
 		return;
 	}
+	for (const w of insecureUrlWarnings(cli)) warnOnce(w);
 
 	const identity = resolveIdentity();
 	const harnessVersion = detectHarnessVersion();

@@ -8,7 +8,7 @@
  * layout); override with `--pi-settings=<path>` or `$TOKEN_TRACKER_PI_SETTINGS`.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
 import { dirname } from "node:path";
 
 type Logger = (line: string) => void;
@@ -48,7 +48,33 @@ function extensionsOf(settings: Record<string, unknown>): string[] {
 
 function writeSettings(path: string, settings: Record<string, unknown>): void {
 	mkdirSync(dirname(path), { recursive: true });
-	writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`);
+	// Preserve the existing file's permission bits if it's already there.
+	let mode = 0o644;
+	try {
+		mode = statSync(path).mode & 0o777;
+	} catch {
+		// New file — keep the default.
+	}
+	// Atomic: write a sibling temp file, then rename over the target, so a
+	// crash mid-write never leaves pi with a truncated settings.json.
+	const tmp = `${path}.${process.pid}.tmp`;
+	const body = `${JSON.stringify(settings, null, 2)}\n`;
+	const fd = openSync(tmp, "w", mode);
+	try {
+		writeSync(fd, body);
+	} finally {
+		closeSync(fd);
+	}
+	try {
+		renameSync(tmp, path);
+	} catch (err) {
+		try {
+			rmSync(tmp, { force: true });
+		} catch {
+			// ignore cleanup failure
+		}
+		throw err;
+	}
 }
 
 export function isInstalled(piSettingsPath: string, extensionDir: string): boolean {

@@ -29,6 +29,9 @@ export async function refreshAccessToken(
 			refresh_token: refreshToken,
 			scope: requestedScope(config),
 		}).toString(),
+		// Don't follow redirects — see device-flow.ts. A redirected refresh
+		// would resend the refresh token in the body.
+		redirect: "error",
 	});
 	const bodyUnknown: unknown = await resp.json().catch(() => undefined);
 	if (typeof bodyUnknown !== "object" || bodyUnknown === null) {

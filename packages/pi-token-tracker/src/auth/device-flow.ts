@@ -38,6 +38,9 @@ export async function requestDeviceCode(
 		method: "POST",
 		headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
 		body: form({ client_id: config.clientId, scope: requestedScope(config) }),
+		// Don't follow redirects: a token-bearing POST that gets redirected
+		// would resend the body (and on 307/308 the credentials) elsewhere.
+		redirect: "error",
 	});
 	const bodyUnknown: unknown = await resp.json().catch(() => undefined);
 	if (!resp.ok || typeof bodyUnknown !== "object" || bodyUnknown === null) {
@@ -90,6 +93,7 @@ async function pollOnce(
 			client_id: config.clientId,
 			device_code: deviceCode,
 		}),
+		redirect: "error",
 	});
 	const bodyUnknown: unknown = await resp.json().catch(() => undefined);
 	if (

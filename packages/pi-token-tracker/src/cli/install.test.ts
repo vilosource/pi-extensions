@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -19,11 +19,19 @@ describe("install / uninstall", () => {
 	});
 	afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
-	it("creates the settings file when it doesn't exist", () => {
+	it("creates the settings file when it doesn't exist, atomically (no temp file left)", () => {
 		const { log } = sink();
 		expect(runInstall(settings, EXT, log)).toBe(0);
 		expect(JSON.parse(readFileSync(settings, "utf8"))).toEqual({ extensions: [EXT] });
 		expect(isInstalled(settings, EXT)).toBe(true);
+		expect(readdirSync(dir)).toEqual(["settings.json"]);
+	});
+
+	it("preserves the existing file's permission bits", () => {
+		writeFileSync(settings, JSON.stringify({ extensions: [] }), { mode: 0o600 });
+		const { log } = sink();
+		expect(runInstall(settings, EXT, log)).toBe(0);
+		expect(statSync(settings).mode & 0o777).toBe(0o600);
 	});
 
 	it("appends without disturbing other keys or extensions", () => {

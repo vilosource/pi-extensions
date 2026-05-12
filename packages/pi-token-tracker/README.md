@@ -95,6 +95,17 @@ src/
 `src/shared/` is IO-free, enforced by the dependency-cruiser `shared-is-pure`
 rule. The `auth/`, `extension/`, and `cli/` layers perform IO.
 
+## Notes / limitations (v1)
+
+- The refresh token is stored at rest in `~/.config/token-tracker/auth.json`
+  with mode `0600` — same posture as the `gh` / `az` / `gcloud` CLIs.
+  OS-keychain integration is a possible future enhancement.
+- The backend ingests OTLP **traces** only (it absorbed the OTel Collector
+  upstream), so this package registers no metric exporter.
+- The extension's effect on `pi` is fail-safe: if it isn't configured, isn't
+  signed in, or the backend is unreachable, it emits at most one stderr line
+  and otherwise does nothing — telemetry failures never affect your session.
+
 ## Local smoke test against the token-tracker lab
 
 ```bash

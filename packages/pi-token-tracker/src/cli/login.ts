@@ -7,7 +7,7 @@
  */
 
 import { authDataFromTokenResponse, writeAuthData } from "../auth/auth-file.js";
-import { loadCliConfig, saveCliConfig } from "../auth/config.js";
+import { insecureUrlWarnings, loadCliConfig, saveCliConfig } from "../auth/config.js";
 import { pollForToken, requestDeviceCode } from "../auth/device-flow.js";
 import { discoverEndpoints } from "../auth/discovery.js";
 import { decodeJwtClaims, userIdFromClaims } from "../auth/jwt.js";
@@ -54,6 +54,7 @@ export async function runLogin(args: ParsedArgs, env: NodeJS.ProcessEnv, log: Lo
 		return 2;
 	}
 	saveCliConfig(config, env);
+	for (const w of insecureUrlWarnings(config)) log(`warning: ${w}`);
 
 	const endpoints = await discoverEndpoints(config.authority);
 	const device = await requestDeviceCode(config, endpoints);
