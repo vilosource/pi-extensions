@@ -42,7 +42,7 @@ export interface InitOtelArgs {
 }
 
 const SHUTDOWN_TIMEOUT_MS = 5000;
-const SERVICE_VERSION = "0.0.0";
+const SERVICE_VERSION = "0.1.0";
 
 export function initOtel(args: InitOtelArgs): OtelSink {
 	const warn = args.verbose

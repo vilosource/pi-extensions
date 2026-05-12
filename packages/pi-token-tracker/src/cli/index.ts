@@ -23,7 +23,7 @@ import { runLogin } from "./login.js";
 import { runLogout } from "./logout.js";
 import { runStatus } from "./status.js";
 
-const VERSION = "0.0.0";
+const VERSION = "0.1.0";
 
 const HELP = `token-tracker — install the telemetry extension into pi, sign in, and manage the credential.
 
@@ -93,13 +93,17 @@ async function main(): Promise<number> {
 		console.log(line);
 	};
 
-	if (args.flags.has("help") || args.command === "help" || args.command === undefined) {
-		log(HELP);
-		return args.command === undefined && !args.flags.has("help") ? 1 : 0;
-	}
 	if (args.flags.has("version")) {
 		log(VERSION);
 		return 0;
+	}
+	if (args.flags.has("help") || args.command === "help") {
+		log(HELP);
+		return 0;
+	}
+	if (args.command === undefined) {
+		log(HELP);
+		return 1;
 	}
 	return dispatch(args, process.env, log);
 }
