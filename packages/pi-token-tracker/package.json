@@ -25,7 +25,8 @@
 	],
 	"scripts": {
 		"build": "tsc -b",
-		"test": "vitest run --dir src"
+		"test": "vitest run --dir src",
+		"smoke": "bash scripts/lab-smoke.sh"
 	},
 	"devDependencies": {
 		"vitest": "^3.0.0"
