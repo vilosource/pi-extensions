@@ -59,6 +59,34 @@ export function loadCliConfig(env: NodeJS.ProcessEnv = process.env): CliConfig |
 	return { endpoint, authority, clientId, apiScope };
 }
 
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+/**
+ * Pure check: warn if `endpoint` or `authority` is `http://` and not a
+ * loopback host — a bearer token would otherwise traverse plaintext. Returns
+ * the warning lines (callers decide how to surface them).
+ */
+export function insecureUrlWarnings(config: CliConfig): string[] {
+	const out: string[] = [];
+	for (const [label, value] of [
+		["endpoint", config.endpoint],
+		["authority", config.authority],
+	] as const) {
+		let url: URL;
+		try {
+			url = new URL(value);
+		} catch {
+			continue;
+		}
+		if (url.protocol === "http:" && !LOCAL_HOSTS.has(url.hostname)) {
+			out.push(
+				`${label} uses plaintext http:// (${value}) — a bearer token will be sent unencrypted. Use https:// unless this is a local lab.`,
+			);
+		}
+	}
+	return out;
+}
+
 export function saveCliConfig(config: CliConfig, env: NodeJS.ProcessEnv = process.env): void {
 	const path = configFilePath(env);
 	mkdirSync(dirname(path), { recursive: true, mode: 0o700 });

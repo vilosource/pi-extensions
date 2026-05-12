@@ -1,12 +1,11 @@
 /**
  * Auth-module tests against an in-process fake OIDC IdP: device-flow
- * sign-in (incl. authorization_pending / slow_down / access_denied / expiry)
- * and the silent-refresh dance behind `getValidAccessToken`.
+ * sign-in (incl. authorization_pending / slow_down / access_denied / expiry),
+ * the silent-refresh dance behind `getValidAccessToken`, and the
+ * no-follow-redirects guard on token-bearing POSTs.
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,117 +13,9 @@ import { getValidAccessToken } from "./access-token.js";
 import { readAuthData, writeAuthData } from "./auth-file.js";
 import { pollForToken, requestDeviceCode } from "./device-flow.js";
 import { clearDiscoveryCache, discoverEndpoints } from "./discovery.js";
+import { DEVICE_CODE, type FakeIdp, fakeJwt, noSleep, startFakeIdp } from "./fake-idp.js";
 import { refreshAccessToken } from "./refresh.js";
 import type { CliConfig } from "./types.js";
-
-// ---- fake IdP -------------------------------------------------------------
-
-interface ScriptedResponse {
-	readonly status: number;
-	readonly body: unknown;
-}
-interface FakeIdpScript {
-	readonly devicePollResponses?: ScriptedResponse[];
-	readonly refreshResponses?: ScriptedResponse[];
-	readonly interval?: number;
-	readonly expiresIn?: number;
-	readonly omitDeviceEndpointInDiscovery?: boolean;
-}
-interface FakeIdp {
-	readonly url: string;
-	readonly tokenRequests: Record<string, string>[];
-	close(): Promise<void>;
-}
-
-const DEVICE_CODE = "DEV-CODE";
-
-function readBody(req: IncomingMessage): Promise<string> {
-	return new Promise((resolve) => {
-		let d = "";
-		req.on("data", (c) => {
-			d += c;
-		});
-		req.on("end", () => resolve(d));
-	});
-}
-function send(res: ServerResponse, status: number, body: unknown): void {
-	res.writeHead(status, { "content-type": "application/json" });
-	res.end(JSON.stringify(body));
-}
-
-async function startFakeIdp(script: FakeIdpScript = {}): Promise<FakeIdp> {
-	const devicePoll = [...(script.devicePollResponses ?? [])];
-	const refresh = [...(script.refreshResponses ?? [])];
-	const tokenRequests: Record<string, string>[] = [];
-
-	const onToken = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-		const params = new URLSearchParams(await readBody(req));
-		const record: Record<string, string> = {};
-		for (const [k, v] of params) record[k] = v;
-		tokenRequests.push(record);
-		const grant = params.get("grant_type");
-		if (grant === "urn:ietf:params:oauth:grant-type:device_code") {
-			if (params.get("device_code") !== DEVICE_CODE) {
-				send(res, 400, { error: "invalid_grant" });
-				return;
-			}
-			const next = devicePoll.shift() ?? { status: 400, body: { error: "expired_token" } };
-			send(res, next.status, next.body);
-			return;
-		}
-		if (grant === "refresh_token") {
-			const next = refresh.shift() ?? { status: 400, body: { error: "invalid_grant" } };
-			send(res, next.status, next.body);
-			return;
-		}
-		send(res, 400, { error: "unsupported_grant_type" });
-	};
-
-	const server: Server = createServer((req, res) => {
-		const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-		const url = req.url ?? "/";
-		if (url.startsWith("/.well-known/openid-configuration")) {
-			send(res, 200, {
-				issuer: origin,
-				token_endpoint: `${origin}/token`,
-				...(script.omitDeviceEndpointInDiscovery ? {} : { device_authorization_endpoint: `${origin}/devicecode` }),
-				end_session_endpoint: `${origin}/logout`,
-			});
-			return;
-		}
-		if (url.startsWith("/devicecode") && req.method === "POST") {
-			send(res, 200, {
-				device_code: DEVICE_CODE,
-				user_code: "USER-CODE",
-				verification_uri: `${origin}/device`,
-				verification_uri_complete: `${origin}/device?code=USER-CODE`,
-				expires_in: script.expiresIn ?? 600,
-				interval: script.interval ?? 1,
-			});
-			return;
-		}
-		if (url.startsWith("/token") && req.method === "POST") {
-			void onToken(req, res);
-			return;
-		}
-		send(res, 404, { error: "not_found" });
-	});
-
-	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-	return {
-		url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
-		tokenRequests,
-		close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-	};
-}
-
-function fakeJwt(claims: Record<string, unknown>): string {
-	const enc = (o: unknown): string => Buffer.from(JSON.stringify(o)).toString("base64url");
-	return `${enc({ alg: "none" })}.${enc(claims)}.sig`;
-}
-const noSleep = (_ms: number): Promise<void> => Promise.resolve();
-
-// ---- fixtures -------------------------------------------------------------
 
 let idp: FakeIdp;
 let cfgDir: string;
@@ -156,8 +47,6 @@ afterEach(async () => {
 	rmSync(cfgDir, { recursive: true, force: true });
 });
 
-// ---- discovery ------------------------------------------------------------
-
 describe("discoverEndpoints", () => {
 	it("reads the device-authorization and token endpoints from the discovery doc", async () => {
 		idp = await startFakeIdp();
@@ -173,8 +62,6 @@ describe("discoverEndpoints", () => {
 		expect(ep.deviceAuthorizationEndpoint).toBe(`${idp.url}/devicecode`);
 	});
 });
-
-// ---- device flow ----------------------------------------------------------
 
 describe("device flow", () => {
 	it("polls through authorization_pending until the token is issued", async () => {
@@ -203,7 +90,6 @@ describe("device flow", () => {
 		});
 		expect(token.access_token).toBe("AT");
 		expect(token.refresh_token).toBe("RT");
-		// 3 device-code polls
 		expect(idp.tokenRequests.filter((r) => r["grant_type"]?.includes("device_code")).length).toBe(3);
 	});
 
@@ -242,8 +128,6 @@ describe("device flow", () => {
 	});
 });
 
-// ---- refresh --------------------------------------------------------------
-
 describe("refreshAccessToken", () => {
 	it("exchanges a refresh token for a fresh access token", async () => {
 		idp = await startFakeIdp({
@@ -267,9 +151,13 @@ describe("refreshAccessToken", () => {
 		const ep = await discoverEndpoints(idp.url);
 		await expect(refreshAccessToken(config(), ep, "RT-OLD")).rejects.toThrow(/invalid_grant/);
 	});
-});
 
-// ---- getValidAccessToken --------------------------------------------------
+	it("refuses to follow a redirect from the token endpoint (would resend the refresh token)", async () => {
+		idp = await startFakeIdp({ redirectTokenEndpoint: true });
+		const ep = await discoverEndpoints(idp.url);
+		await expect(refreshAccessToken(config(), ep, "RT-OLD")).rejects.toThrow();
+	});
+});
 
 describe("getValidAccessToken", () => {
 	const farFuture = (): number => Math.floor(Date.now() / 1000) + 9999;
@@ -277,21 +165,18 @@ describe("getValidAccessToken", () => {
 
 	it("returns undefined when not configured", async () => {
 		idp = await startFakeIdp();
-		const tok = await getValidAccessToken({ env: { TOKEN_TRACKER_CONFIG_DIR: cfgDir } });
-		expect(tok).toBeUndefined();
+		expect(await getValidAccessToken({ env: { TOKEN_TRACKER_CONFIG_DIR: cfgDir } })).toBeUndefined();
 	});
 
 	it("returns undefined when configured but no auth file exists", async () => {
 		idp = await startFakeIdp();
-		const tok = await getValidAccessToken({ env: env() });
-		expect(tok).toBeUndefined();
+		expect(await getValidAccessToken({ env: env() })).toBeUndefined();
 	});
 
 	it("returns the cached token without contacting the IdP when it is still valid", async () => {
 		idp = await startFakeIdp();
 		writeAuthData({ accessToken: "AT-CACHED", refreshToken: "RT", expiresAt: farFuture() }, env());
-		const tok = await getValidAccessToken({ env: env() });
-		expect(tok).toBe("AT-CACHED");
+		expect(await getValidAccessToken({ env: env() })).toBe("AT-CACHED");
 		expect(idp.tokenRequests.length).toBe(0);
 	});
 
@@ -302,8 +187,7 @@ describe("getValidAccessToken", () => {
 			],
 		});
 		writeAuthData({ accessToken: "AT-OLD", refreshToken: "RT1", expiresAt: soon() }, env());
-		const tok = await getValidAccessToken({ env: env(), refreshSkewSeconds: 120 });
-		expect(tok).toBe("AT-FRESH");
+		expect(await getValidAccessToken({ env: env(), refreshSkewSeconds: 120 })).toBe("AT-FRESH");
 		const persisted = readAuthData(env());
 		expect(persisted?.accessToken).toBe("AT-FRESH");
 		expect(persisted?.refreshToken).toBe("RT2");

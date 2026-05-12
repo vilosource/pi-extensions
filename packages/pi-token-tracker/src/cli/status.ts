@@ -5,7 +5,7 @@
  */
 
 import { readAuthData } from "../auth/auth-file.js";
-import { loadCliConfig } from "../auth/config.js";
+import { insecureUrlWarnings, loadCliConfig } from "../auth/config.js";
 import { decodeJwtClaims, userIdFromClaims } from "../auth/jwt.js";
 import { authFilePath, configFilePath } from "../auth/paths.js";
 
@@ -23,6 +23,7 @@ export function runStatus(env: NodeJS.ProcessEnv, log: Logger): number {
 	log(`Authority:    ${config.authority}`);
 	log(`Client id:    ${config.clientId}`);
 	log(`API scope:    ${config.apiScope}`);
+	for (const w of insecureUrlWarnings(config)) log(`! ${w}`);
 
 	const auth = readAuthData(env);
 	if (auth === undefined) {
